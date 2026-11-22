@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/credentials.dart';
 import '../../core/store.dart';
+import 'erp_client.dart';
 import 'attendance.dart';
 
 class AttendanceScreen extends StatefulWidget {
@@ -11,6 +13,7 @@ class AttendanceScreen extends StatefulWidget {
 class _AttendanceScreenState extends State<AttendanceScreen> {
   static const _key = 'subjects';
   List<Subject> subjects = [];
+  bool syncing = false;
 
   @override
   void initState() {
@@ -22,6 +25,66 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   void _save() {
     Store.write(_key, subjects.map((e) => e.toJson()).toList());
     setState(() {});
+  }
+
+
+  Future<void> _sync() async {
+    var (id, pw) = await Credentials.load();
+    if (id == null || pw == null) {
+      final idC = TextEditingController();
+      final pwC = TextEditingController();
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('ERP login'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: idC, decoration: const InputDecoration(labelText: 'ERP ID')),
+            TextField(controller: pwC, obscureText: true, decoration: const InputDecoration(labelText: 'Password')),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      id = idC.text.trim();
+      pw = pwC.text;
+      await Credentials.save(id, pw);
+    }
+    setState(() => syncing = true);
+    final erp = ErpClient();
+    try {
+      await erp.login(id, pw);
+      final fetched = await erp.fetchAttendance();
+      for (final f in fetched) {
+        final i = subjects.indexWhere((s) => s.name == f.name);
+        final total = f.present + f.absent;
+        if (i >= 0) {
+          subjects[i].attended = f.present;
+          subjects[i].total = total;
+        } else {
+          subjects.add(Subject(
+            name: f.name,
+            isLab: f.name.toLowerCase().contains('lab'),
+            attended: f.present,
+            total: total,
+          ));
+        }
+      }
+      _save();
+      _msg('Synced ${fetched.length} subjects from ERP');
+    } catch (e) {
+      _msg('Sync failed: $e');
+    } finally {
+      erp.close();
+      if (mounted) setState(() => syncing = false);
+    }
+  }
+
+  void _msg(String m) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
   }
 
   Future<void> _addSubject() async {
@@ -57,7 +120,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Widget build(BuildContext context) {
     final overall = overallPercent(subjects);
     return Scaffold(
-      appBar: AppBar(title: const Text('Attendance')),
+      appBar: AppBar(title: const Text('Attendance'), actions: [
+        syncing
+            ? const Padding(padding: EdgeInsets.all(16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+            : IconButton(icon: const Icon(Icons.sync), tooltip: 'Sync from ERP', onPressed: _sync),
+      ]),
       floatingActionButton:
           FloatingActionButton(onPressed: _addSubject, child: const Icon(Icons.add)),
       body: ListView(padding: const EdgeInsets.all(12), children: [
@@ -90,7 +157,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ? 'Can skip ${s.safeSkips} more'
             : 'Attend next ${s.mustAttend} in a row';
     return Card(
-      child: Padding(
+      child: InkWell(
+        onLongPress: () { s.isLab = !s.isLab; _save(); },
+        child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
@@ -116,7 +185,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 onPressed: () { subjects.remove(s); _save(); }),
           ]),
         ]),
-      ),
+      )),
     );
   }
 }
