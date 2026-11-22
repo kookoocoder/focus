@@ -1,7 +1,11 @@
+import 'package:alarm/alarm.dart';
 import 'package:flutter/material.dart';
 import 'core/background.dart';
 import 'core/notifications.dart';
 import 'core/store.dart';
+import 'features/alarms/alarms.dart';
+import 'features/alarms/alarms_screen.dart';
+import 'features/alarms/ring_screen.dart';
 import 'features/attendance/attendance_screen.dart';
 import 'features/attendance/attendance_sync.dart';
 import 'features/diet/diet_screen.dart';
@@ -12,12 +16,30 @@ import 'features/timer/timer_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Store.init();
+  await Alarm.init();
   runApp(const FocusApp());
+  _listenForRinging();
+  await scheduleAlarms();
   await Notifier.requestPermission();
   await scheduleBackgroundSync();
   if (Store.read<String>(lastSyncKey) == null) {
     syncAndNotify(force: true).ignore();
   }
+}
+
+final navigatorKey = GlobalKey<NavigatorState>();
+final _shown = <int>{};
+
+void _listenForRinging() {
+  Alarm.ringing.listen((set) {
+    for (final a in set.alarms) {
+      if (_shown.add(a.id)) {
+        navigatorKey.currentState
+            ?.push(MaterialPageRoute(builder: (_) => RingScreen(alarm: a)))
+            .then((_) => _shown.remove(a.id));
+      }
+    }
+  });
 }
 
 class FocusApp extends StatelessWidget {
@@ -30,6 +52,7 @@ class FocusApp extends StatelessWidget {
             colorSchemeSeed: Colors.indigo,
             brightness: Brightness.dark,
             useMaterial3: true),
+        navigatorKey: navigatorKey,
         home: const Home(),
       );
 }
@@ -48,12 +71,14 @@ class _HomeState extends State<Home> {
     DietScreen(),
     GateScreen(),
     TimerScreen(),
+    AlarmsScreen(),
   ];
 
   @override
   Widget build(BuildContext context) => Scaffold(
         body: IndexedStack(index: i, children: pages),
         bottomNavigationBar: NavigationBar(
+          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
           selectedIndex: i,
           onDestinationSelected: (v) => setState(() => i = v),
           destinations: const [
@@ -62,6 +87,7 @@ class _HomeState extends State<Home> {
             NavigationDestination(icon: Icon(Icons.restaurant), label: 'Diet'),
             NavigationDestination(icon: Icon(Icons.school_outlined), label: 'GATE'),
             NavigationDestination(icon: Icon(Icons.timer_outlined), label: 'Focus'),
+            NavigationDestination(icon: Icon(Icons.alarm), label: 'Alarms'),
           ],
         ),
       );
