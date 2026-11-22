@@ -1,4 +1,5 @@
 import 'package:alarm/alarm.dart';
+
 import '../../core/store.dart';
 
 const alarmsKey = 'alarms';
@@ -7,10 +8,10 @@ enum AlarmKind { wake, gym, study }
 
 extension AlarmKindLabel on AlarmKind {
   String get label => switch (this) {
-        AlarmKind.wake => 'Wake up',
-        AlarmKind.gym => 'Gym',
-        AlarmKind.study => 'GATE study',
-      };
+    AlarmKind.wake => 'Wake up',
+    AlarmKind.gym => 'Gym',
+    AlarmKind.study => 'GATE study',
+  };
 }
 
 class AlarmItem {
@@ -47,26 +48,27 @@ class AlarmItem {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'kind': kind.name,
-        'hour': hour,
-        'minute': minute,
-        'days': days,
-        'on': on,
-      };
+    'id': id,
+    'kind': kind.name,
+    'hour': hour,
+    'minute': minute,
+    'days': days,
+    'on': on,
+  };
 
   factory AlarmItem.fromJson(Map<String, dynamic> j) => AlarmItem(
-        id: j['id'],
-        kind: AlarmKind.values.byName(j['kind']),
-        hour: j['hour'],
-        minute: j['minute'],
-        days: (j['days'] as List).cast<int>(),
-        on: j['on'] ?? true,
-      );
+    id: j['id'],
+    kind: AlarmKind.values.byName(j['kind']),
+    hour: j['hour'],
+    minute: j['minute'],
+    days: (j['days'] as List).cast<int>(),
+    on: j['on'] ?? true,
+  );
 }
 
-List<AlarmItem> loadAlarms() =>
-    (Store.read<List>(alarmsKey) ?? []).map((e) => AlarmItem.fromJson(e)).toList();
+List<AlarmItem> loadAlarms() => (Store.read<List>(alarmsKey) ?? [])
+    .map((e) => AlarmItem.fromJson(e))
+    .toList();
 
 Future<void> saveAlarms(List<AlarmItem> items) async {
   await Store.write(alarmsKey, items.map((e) => e.toJson()).toList());
@@ -74,23 +76,23 @@ Future<void> saveAlarms(List<AlarmItem> items) async {
 }
 
 AlarmSettings _settings(int id, DateTime at, String title) => AlarmSettings(
-      id: id,
-      dateTime: at,
-      vibrate: true,
-      loopAudio: true,
-      androidFullScreenIntent: true,
-      warningNotificationOnKill: false,
-      volumeSettings: VolumeSettings.fade(
-        volume: 1.0,
-        fadeDuration: const Duration(seconds: 10),
-        volumeEnforced: true,
-      ),
-      notificationSettings: NotificationSettings(
-        title: title,
-        body: 'Tap to open Focus',
-        stopButton: 'Stop',
-      ),
-    );
+  id: id,
+  dateTime: at,
+  vibrate: true,
+  loopAudio: true,
+  androidFullScreenIntent: true,
+  warningNotificationOnKill: false,
+  volumeSettings: VolumeSettings.fade(
+    volume: 1.0,
+    fadeDuration: const Duration(seconds: 10),
+    volumeEnforced: true,
+  ),
+  notificationSettings: NotificationSettings(
+    title: title,
+    body: 'Tap to open Focus',
+    stopButton: 'Stop',
+  ),
+);
 
 /// (Re)schedules the next ring of every enabled alarm; one-time alarms that
 /// already rang are switched off.
@@ -106,15 +108,30 @@ Future<void> scheduleAlarms([List<AlarmItem>? items]) async {
 }
 
 Future<void> snooze(int id, String title) => Alarm.set(
-    alarmSettings: _settings(
-        id, DateTime.now().add(const Duration(minutes: 5)), '$title (snoozed)'));
+  alarmSettings: _settings(
+    id,
+    DateTime.now().add(const Duration(minutes: 5)),
+    '$title (snoozed)',
+  ),
+);
 
 /// Called after an alarm is dismissed so repeating alarms ring again.
 Future<void> afterDismiss(int id) async {
   await Alarm.stop(id);
+  if (id == _testId) return;
   final items = loadAlarms();
   for (final a in items) {
     if (a.id == id && a.days.isEmpty) a.on = false;
   }
   await saveAlarms(items);
 }
+
+const _testId = 9999;
+
+Future<void> testAlarm() => Alarm.set(
+  alarmSettings: _settings(
+    _testId,
+    DateTime.now().add(const Duration(seconds: 10)),
+    'Test alarm',
+  ),
+);
