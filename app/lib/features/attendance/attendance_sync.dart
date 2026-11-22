@@ -8,8 +8,15 @@ const subjectsKey = 'subjects';
 const _lastSummaryKey = 'lastSummary';
 const lastSyncKey = 'lastSync';
 
-List<Subject> loadSubjects() =>
-    (Store.read<List>(subjectsKey) ?? []).map((e) => Subject.fromJson(e)).toList();
+List<Subject> loadSubjects() => (Store.read<List>(subjectsKey) ?? [])
+    .map((e) => Subject.fromJson(e))
+    .toList();
+
+/// Subjects the ERP lists by mistake; not actually enrolled.
+const _ignored = ['cloud infrastructure'];
+
+bool _isIgnored(String name) =>
+    _ignored.any((i) => name.toLowerCase().contains(i));
 
 /// Theory subject rule: anything with "lab" in the name is a practical.
 bool _isLab(String name) => name.toLowerCase().contains('lab');
@@ -26,12 +33,13 @@ Future<List<Subject>> syncFromErp() async {
     final fetched = await erp.fetchAttendance();
     final subjects = [
       for (final f in fetched)
-        Subject(
-          name: f.name,
-          isLab: _isLab(f.name),
-          attended: f.present,
-          total: f.present + f.absent,
-        ),
+        if (!_isIgnored(f.name))
+          Subject(
+            name: f.name,
+            isLab: _isLab(f.name),
+            attended: f.present,
+            total: f.present + f.absent,
+          ),
     ];
     await Store.write(subjectsKey, subjects.map((e) => e.toJson()).toList());
     await Store.write(lastSyncKey, DateTime.now().toIso8601String());
@@ -59,7 +67,9 @@ String summary(List<Subject> subjects) {
       '${s.percent >= 75 ? "✅" : "⛔"} ${s.name} ${s.percent.toStringAsFixed(0)}%: ${verdict(s)}',
   ];
   final o = overallPercent(subjects);
-  lines.add('Overall ${o.toStringAsFixed(1)}% ${o >= 50 ? "(ok)" : "(below 50%!)"}');
+  lines.add(
+    'Overall ${o.toStringAsFixed(1)}% ${o >= 50 ? "(ok)" : "(below 50%!)"}',
+  );
   return lines.join('\n');
 }
 
