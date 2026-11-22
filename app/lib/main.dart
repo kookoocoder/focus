@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'core/background.dart';
+import 'core/notifications.dart';
 import 'core/store.dart';
 import 'features/attendance/attendance_screen.dart';
+import 'features/attendance/attendance_sync.dart';
 import 'features/diet/diet_screen.dart';
 import 'features/gate/gate_screen.dart';
 import 'features/gym/gym_screen.dart';
@@ -10,6 +13,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Store.init();
   runApp(const FocusApp());
+  await Notifier.requestPermission();
+  await scheduleBackgroundSync();
+  if (Store.read<String>(lastSyncKey) == null) {
+    syncAndNotify(force: true).ignore();
+  }
 }
 
 class FocusApp extends StatelessWidget {
