@@ -1,5 +1,6 @@
 import 'package:alarm/alarm.dart';
 import 'package:flutter/material.dart';
+
 import 'alarms.dart';
 
 const _dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -14,7 +15,9 @@ class _AlarmsScreenState extends State<AlarmsScreen> {
   List<AlarmItem> items = loadAlarms();
 
   Future<void> _save() async {
-    items.sort((a, b) => (a.hour * 60 + a.minute).compareTo(b.hour * 60 + b.minute));
+    items.sort(
+      (a, b) => (a.hour * 60 + a.minute).compareTo(b.hour * 60 + b.minute),
+    );
     await saveAlarms(items);
     setState(() {});
   }
@@ -28,47 +31,76 @@ class _AlarmsScreenState extends State<AlarmsScreen> {
     );
     if (t == null || !mounted) return;
     var kind = existing?.kind ?? AlarmKind.wake;
-    final days = [...(existing?.days ?? [1, 2, 3, 4, 5, 6, 7])];
+    final days = [
+      ...(existing?.days ?? [1, 2, 3, 4, 5, 6, 7]),
+    ];
     final ok = await showModalBottomSheet<bool>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, set) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(t.format(ctx), style: const TextStyle(fontSize: 40)),
-            const SizedBox(height: 12),
-            SegmentedButton<AlarmKind>(
-              segments: [
-                for (final k in AlarmKind.values)
-                  ButtonSegment(value: k, label: Text(k.label)),
-              ],
-              selected: {kind},
-              onSelectionChanged: (v) => set(() => kind = v.first),
-            ),
-            const SizedBox(height: 12),
-            Wrap(spacing: 6, children: [
-              for (var d = 1; d <= 7; d++)
-                FilterChip(
-                  label: Text(_dayLetters[d - 1]),
-                  selected: days.contains(d),
-                  onSelected: (v) => set(() => v ? days.add(d) : days.remove(d)),
+        builder: (ctx, set) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(t.format(ctx), style: const TextStyle(fontSize: 40)),
+                const SizedBox(height: 12),
+                SegmentedButton<AlarmKind>(
+                  segments: [
+                    for (final k in AlarmKind.values)
+                      ButtonSegment(value: k, label: Text(k.label)),
+                  ],
+                  selected: {kind},
+                  onSelectionChanged: (v) => set(() => kind = v.first),
                 ),
-            ]),
-            Text(days.isEmpty ? 'One-time' : 'Repeats', style: Theme.of(ctx).textTheme.bodySmall),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    for (var d = 1; d <= 7; d++)
+                      FilterChip(
+                        showCheckmark: false,
+                        label: Text(_dayLetters[d - 1]),
+                        selected: days.contains(d),
+                        onSelected: (v) =>
+                            set(() => v ? days.add(d) : days.remove(d)),
+                      ),
+                  ],
+                ),
+                Text(
+                  days.isEmpty ? 'One-time' : 'Repeats',
+                  style: Theme.of(ctx).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Save'),
+                  ),
+                ),
+              ],
             ),
-          ]),
+          ),
         ),
       ),
     );
     if (ok != true) return;
     if (existing == null) {
-      final id = items.isEmpty ? 1 : items.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
-      items.add(AlarmItem(id: id, kind: kind, hour: t.hour, minute: t.minute, days: days));
+      final id = items.isEmpty
+          ? 1
+          : items.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
+      items.add(
+        AlarmItem(
+          id: id,
+          kind: kind,
+          hour: t.hour,
+          minute: t.minute,
+          days: days,
+        ),
+      );
     } else {
       existing
         ..kind = kind
@@ -90,37 +122,65 @@ class _AlarmsScreenState extends State<AlarmsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Alarms')),
-      floatingActionButton: FloatingActionButton(onPressed: _edit, child: const Icon(Icons.add_alarm)),
-      body: items.isEmpty
-          ? const Center(child: Text('No alarms. Tap + to add one.'))
-          : ListView(children: [
-              for (final a in items)
-                Dismissible(
-                  key: ValueKey(a.id),
-                  onDismissed: (_) async {
-                    await Alarm.stop(a.id);
-                    items.remove(a);
-                    await _save();
-                  },
-                  child: ListTile(
-                    onTap: () => _edit(a),
-                    title: Text(a.time,
-                        style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w300,
-                            color: a.on ? null : Theme.of(context).disabledColor)),
-                    subtitle: Text('${a.kind.label} · ${_daysText(a.days)}'),
-                    trailing: Switch(
-                      value: a.on,
-                      onChanged: (v) {
-                        a.on = v;
-                        _save();
-                      },
+      appBar: AppBar(
+        title: const Text('Alarms'),
+        actions: [
+          TextButton.icon(
+            onPressed: () async {
+              await testAlarm();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Test alarm rings in 10 seconds. Lock the phone.',
                     ),
                   ),
-                ),
-            ]),
+                );
+              }
+            },
+            icon: const Icon(Icons.notifications_active_outlined),
+            label: const Text('Test'),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _edit,
+        child: const Icon(Icons.add_alarm),
+      ),
+      body: items.isEmpty
+          ? const Center(child: Text('No alarms. Tap + to add one.'))
+          : ListView(
+              children: [
+                for (final a in items)
+                  Dismissible(
+                    key: ValueKey(a.id),
+                    onDismissed: (_) async {
+                      await Alarm.stop(a.id);
+                      items.remove(a);
+                      await _save();
+                    },
+                    child: ListTile(
+                      onTap: () => _edit(a),
+                      title: Text(
+                        a.time,
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w300,
+                          color: a.on ? null : Theme.of(context).disabledColor,
+                        ),
+                      ),
+                      subtitle: Text('${a.kind.label} · ${_daysText(a.days)}'),
+                      trailing: Switch(
+                        value: a.on,
+                        onChanged: (v) {
+                          a.on = v;
+                          _save();
+                        },
+                      ),
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 }
