@@ -73,7 +73,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           if (labs.isNotEmpty)
             const Padding(
               padding: EdgeInsets.fromLTRB(4, 16, 4, 4),
-              child: Text('Labs (no 75% rule)'),
+              child: Text('Labs & non-theory (no 75% rule)'),
             ),
           for (final s in labs) _tile(s),
         ]),

@@ -18,8 +18,11 @@ const _ignored = ['cloud infrastructure'];
 bool _isIgnored(String name) =>
     _ignored.any((i) => name.toLowerCase().contains(i));
 
-/// Theory subject rule: anything with "lab" in the name is a practical.
-bool _isLab(String name) => name.toLowerCase().contains('lab');
+/// Non-theory subjects (labs, mentoring) have no 75% minimum.
+const _nonTheory = ['lab', 'gurdian', 'guardian'];
+
+bool _isLab(String name) =>
+    _nonTheory.any((k) => name.toLowerCase().contains(k));
 
 /// Pull attendance from the ERP and persist it. No manual input involved.
 Future<List<Subject>> syncFromErp() async {
@@ -50,7 +53,7 @@ Future<List<Subject>> syncFromErp() async {
 }
 
 String verdict(Subject s) {
-  if (s.isLab) return 'lab, no minimum';
+  if (s.isLab) return 'no 75% rule';
   if (s.percent >= 75) {
     return s.safeSkips == 0
         ? "don't skip next"
