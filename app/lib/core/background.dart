@@ -20,14 +20,15 @@ void callbackDispatcher() {
   });
 }
 
-/// Checks the ERP every 6 hours while the phone has internet.
+/// Checks the ERP every 2 hours while the phone has internet (kept low so the
+/// college ERP doesn't rate-limit us).
 Future<void> scheduleBackgroundSync() async {
   await Workmanager().initialize(callbackDispatcher);
   await Workmanager().registerPeriodicTask(
     _attendanceTask,
     _attendanceTask,
-    frequency: const Duration(hours: 6),
+    frequency: const Duration(hours: 2),
     constraints: Constraints(networkType: NetworkType.connected),
-    existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+    existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
   );
 }
