@@ -22,23 +22,32 @@ class Notifier {
     await init();
     await _p
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.requestNotificationsPermission();
   }
 
-  static NotificationDetails _details(String channel, String name, String body) =>
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          channel,
-          name,
-          importance: Importance.high,
-          priority: Priority.high,
-          styleInformation: BigTextStyleInformation(body),
-        ),
-      );
+  static NotificationDetails _details(
+    String channel,
+    String name,
+    String body,
+  ) => NotificationDetails(
+    android: AndroidNotificationDetails(
+      channel,
+      name,
+      importance: Importance.high,
+      priority: Priority.high,
+      styleInformation: BigTextStyleInformation(body),
+    ),
+  );
 
-  static Future<void> show(int id, String title, String body,
-      {String channel = 'attendance', String channelName = 'Attendance'}) async {
+  static Future<void> show(
+    int id,
+    String title,
+    String body, {
+    String channel = 'attendance',
+    String channelName = 'Attendance',
+  }) async {
     await init();
     await _p.show(
       id: id,
@@ -49,11 +58,25 @@ class Notifier {
   }
 
   /// Repeats every day at [hour]:[minute] (IST).
-  static Future<void> daily(int id, int hour, int minute, String title,
-      String body, {String channel = 'gym', String channelName = 'Gym'}) async {
+  static Future<void> daily(
+    int id,
+    int hour,
+    int minute,
+    String title,
+    String body, {
+    String channel = 'gym',
+    String channelName = 'Gym',
+  }) async {
     await init();
     final now = tz.TZDateTime.now(tz.local);
-    var at = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+    var at = tz.TZDateTime(
+      tz.local,
+      now.year,
+      now.month,
+      now.day,
+      hour,
+      minute,
+    );
     if (!at.isAfter(now)) at = at.add(const Duration(days: 1));
     await _p.zonedSchedule(
       id: id,
@@ -63,6 +86,39 @@ class Notifier {
       notificationDetails: _details(channel, channelName, body),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
+    );
+  }
+
+  /// Repeats every week on [weekday] (1 = Mon) at [hour]:[minute] (IST).
+  static Future<void> weekly(
+    int id,
+    int weekday,
+    int hour,
+    int minute,
+    String title,
+    String body,
+  ) async {
+    await init();
+    final now = tz.TZDateTime.now(tz.local);
+    var at = tz.TZDateTime(
+      tz.local,
+      now.year,
+      now.month,
+      now.day,
+      hour,
+      minute,
+    );
+    while (at.weekday != weekday || !at.isAfter(now)) {
+      at = at.add(const Duration(days: 1));
+    }
+    await _p.zonedSchedule(
+      id: id,
+      scheduledDate: at,
+      title: title,
+      body: body,
+      notificationDetails: _details('reminders', 'Reminders', body),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
     );
   }
 
