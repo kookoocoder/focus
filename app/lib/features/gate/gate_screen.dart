@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/store.dart';
+import 'pw_connect_screen.dart';
 
 /// GATE 2028 (CSE) tracker. Topics are NOT hardcoded: they will be imported from
 /// the PW course. Until then you can add items manually.
@@ -60,7 +61,14 @@ class _GateScreenState extends State<GateScreen> {
     final days = target.difference(DateTime.now()).inDays;
     final done = items.where((e) => e['done'] == true).length;
     return Scaffold(
-      appBar: AppBar(title: const Text('GATE 2028')),
+      appBar: AppBar(title: const Text('GATE 2028'), actions: [
+        TextButton.icon(
+          onPressed: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const PwConnectScreen())),
+          icon: const Icon(Icons.link),
+          label: const Text('Connect PW'),
+        ),
+      ]),
       floatingActionButton: FloatingActionButton(
         onPressed: _add,
         child: const Icon(Icons.add),
