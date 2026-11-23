@@ -25,6 +25,28 @@ class MainActivity : FlutterActivity() {
                         ScrollStore.setLimit(this, call.argument<Int>("limit") ?: 0)
                         result.success(null)
                     }
+                    "getTimeLimit" -> result.success(ScrollStore.timeLimit(this))
+                    "setTimeLimit" -> {
+                        ScrollStore.setTimeLimit(this, call.argument<Int>("minutes") ?: 0)
+                        result.success(null)
+                    }
+                    "getLock" -> result.success(ScrollStore.lockEnabled(this))
+                    "setLock" -> {
+                        ScrollStore.setLock(this, call.argument<Boolean>("on") ?: true)
+                        result.success(null)
+                    }
+                    "lecture" -> result.success(
+                        ScrollStore.currentLecture(this, System.currentTimeMillis())?.toString())
+                    "history" -> result.success(
+                        JSONObject().put("since", ScrollStore.since(this))
+                            .put("days", JSONArray(ScrollStore.history(this, 30))).toString())
+                    "last" -> result.success(ScrollStore.last(this)?.let {
+                        val (pkg, t) = it.split("|")
+                        val label = try {
+                            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+                        } catch (e: Exception) { pkg }
+                        "$label ($pkg) ${(System.currentTimeMillis() - t.toLong()) / 1000}s ago"
+                    })
                     "stats" -> result.success(stats())
                     else -> result.notImplemented()
                 }
@@ -38,8 +60,9 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun stats(): String {
-        val day = JSONObject(ScrollStore.todayJson(this))
+        val day = JSONObject(ScrollStore.dayJson(this, ScrollStore.today()).toString())
         val out = JSONArray()
+        val secs = ScrollStore.secsByPkg(this, ScrollStore.today())
         for (pkg in day.keys()) {
             val o = day.getJSONObject(pkg)
             val label = try {
@@ -47,6 +70,7 @@ class MainActivity : FlutterActivity() {
             } catch (e: Exception) { pkg }
             out.put(JSONObject().put("pkg", pkg).put("name", label)
                 .put("n", o.optInt("n")).put("px", o.optLong("px"))
+                .put("secs", secs[pkg] ?: 0L)
                 .put("limited", pkg in ScrollStore.limited))
         }
         return out.toString()
