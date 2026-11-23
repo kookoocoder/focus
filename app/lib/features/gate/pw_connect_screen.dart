@@ -14,14 +14,14 @@ class PwConnectScreen extends StatefulWidget {
   State<PwConnectScreen> createState() => _PwConnectScreenState();
 }
 
-const _hook = r'''
+const pwHook = r'''
 (function () {
   if (window.__focusHook) return;
   window.__focusHook = true;
   const want = (u) => /api\.penpencil\.co\/.*(\/v3\/batches\/[^/]+\/details|\/subject\/progress|\/todays-schedule)/i.test(u);
   const send = (url, body) => {
     try {
-      if (body && body[0] === '{') FocusCapture.postMessage(JSON.stringify({url, body}));
+      if (body && body[0] === '{') FocusCapture.postMessage(JSON.stringify({url, body, page: location.href}));
     } catch (e) {}
   };
   const of = window.fetch;
@@ -58,8 +58,10 @@ class _PwConnectScreenState extends State<PwConnectScreen> {
         'FocusCapture',
         onMessageReceived: (m) {
           final j = jsonDecode(m.message) as Map<String, dynamic>;
-          if (course.ingest(j['url'], j['body'])) {
+          final kind = course.ingest(j['url'], j['body']);
+          if (kind != null) {
             course.save();
+            rememberPwPage(kind, j['page']);
             setState(() => captured++);
           }
         },
@@ -71,8 +73,8 @@ class _PwConnectScreenState extends State<PwConnectScreen> {
           onNavigationRequest: (r) => r.url.startsWith('http')
               ? NavigationDecision.navigate
               : NavigationDecision.prevent,
-          onPageStarted: (_) => _c.runJavaScript(_hook),
-          onPageFinished: (_) => _c.runJavaScript(_hook),
+          onPageStarted: (_) => _c.runJavaScript(pwHook),
+          onPageFinished: (_) => _c.runJavaScript(pwHook),
         ),
       )
       ..loadRequest(Uri.parse('https://www.pw.live/study-v2/batches'));

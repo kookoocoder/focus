@@ -6,6 +6,17 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/store.dart';
 
 const pwKey = 'pwCourse';
+const _pagesKey = 'pwPages';
+
+/// PW pages (by data kind) that load the responses we need; learned while you
+/// browse once, then reloaded silently for automatic refresh.
+Map<String, String> pwPages() =>
+    (Store.read<Map<String, dynamic>>(_pagesKey) ?? {}).cast<String, String>();
+
+Future<void> rememberPwPage(String kind, String page) async {
+  final m = pwPages()..[kind] = page;
+  await Store.write(_pagesKey, m);
+}
 
 class PwSubject {
   final String id;
@@ -85,14 +96,14 @@ class PwCourse {
       )
       .toList();
 
-  /// Feed one captured response. Returns true if anything changed.
-  bool ingest(String url, String body) {
+  /// Feed one captured response. Returns which kind was read, or null.
+  String? ingest(String url, String body) {
     final path = Uri.tryParse(url)?.path ?? url;
     Map<String, dynamic> j;
     try {
       j = jsonDecode(body) as Map<String, dynamic>;
     } catch (_) {
-      return false;
+      return null;
     }
     final data = j['data'];
     if (path.endsWith('/details') &&
@@ -109,7 +120,7 @@ class PwCourse {
             old[s['_id']]?.completed ?? 0,
           ),
       ];
-      return true;
+      return 'details';
     }
     if (path.endsWith('/subject/progress') && data is List) {
       final byId = {for (final s in subjects) s.id: s};
@@ -119,7 +130,7 @@ class PwCourse {
         s.total = (p['totalLectures'] as num?)?.toInt() ?? s.total;
         s.completed = (p['completedLectures'] as num?)?.toInt() ?? s.completed;
       }
-      return true;
+      return 'progress';
     }
     if (path.endsWith('/todays-schedule') && data is List) {
       schedule = [
@@ -132,9 +143,9 @@ class PwCourse {
               DateTime.parse(e['data']['endTime']).toLocal(),
             ),
       ];
-      return true;
+      return 'schedule';
     }
-    return false;
+    return null;
   }
 }
 
@@ -149,7 +160,9 @@ Future<PwCourse> rebuildFromCapture() async {
   for (final line in await f.readAsLines()) {
     try {
       final m = jsonDecode(line) as Map<String, dynamic>;
-      if (m['url'] != null) changed |= course.ingest(m['url'], m['body'] ?? '');
+      if (m['url'] != null) {
+        changed |= course.ingest(m['url'], m['body'] ?? '') != null;
+      }
     } catch (_) {}
   }
   if (changed) await course.save();
