@@ -70,6 +70,11 @@ class _PwConnectScreenState extends State<PwConnectScreen> {
         setState(() => captured++);
       })
       ..setNavigationDelegate(NavigationDelegate(
+        // Truecaller and other app links can't open in a WebView; stay on the
+        // page so PW falls back to SMS OTP.
+        onNavigationRequest: (r) => r.url.startsWith('http')
+            ? NavigationDecision.navigate
+            : NavigationDecision.prevent,
         onPageStarted: (_) => _c.runJavaScript(_hook),
         onPageFinished: (_) => _c.runJavaScript(_hook),
       ))
