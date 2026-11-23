@@ -16,13 +16,34 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   String? error;
   bool syncing = false;
 
+  static const _autoAfter = Duration(hours: 1);
+  static const _manualGap = Duration(minutes: 5);
+
+  Duration get _sinceSync {
+    final last = Store.read<String>(lastSyncKey);
+    return last == null
+        ? const Duration(days: 1)
+        : DateTime.now().difference(DateTime.parse(last));
+  }
+
   @override
   void initState() {
     super.initState();
-    _sync();
+    if (_sinceSync > _autoAfter) _sync();
+  }
+
+  Future<void> _manualSync() async {
+    final wait = _manualGap - _sinceSync;
+    if (wait > Duration.zero) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Just synced. Try again in ${wait.inMinutes + 1} min.')));
+      return;
+    }
+    await _sync();
   }
 
   Future<void> _sync() async {
+    if (syncing) return;
     setState(() => syncing = true);
     try {
       subjects = await syncFromErp();
@@ -43,6 +64,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Attendance'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Update from ERP',
+            onPressed: syncing ? null : _manualSync,
+          ),
+        ],
         bottom: syncing
             ? const PreferredSize(
                 preferredSize: Size.fromHeight(2),
@@ -51,7 +79,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             : null,
       ),
       body: RefreshIndicator(
-        onRefresh: _sync,
+        onRefresh: _manualSync,
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
