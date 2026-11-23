@@ -27,24 +27,39 @@ class ErpClient {
   String get _cookieHeader =>
       _cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
 
-  Future<(int, String, String?)> _send(String method, Uri uri,
-      {Map<String, String>? form}) async {
+  Future<(int, String, String?)> _send(
+    String method,
+    Uri uri, {
+    Map<String, String>? form,
+  }) async {
     final req = await _http.openUrl(method, uri);
     req.followRedirects = false;
     req.headers.set(HttpHeaders.cookieHeader, _cookieHeader);
     req.headers.set('X-Requested-With', 'XMLHttpRequest');
     if (form != null) {
-      req.headers.contentType = ContentType('application', 'x-www-form-urlencoded');
-      req.write(form.entries
-          .map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}')
-          .join('&'));
+      req.headers.contentType = ContentType(
+        'application',
+        'x-www-form-urlencoded',
+      );
+      req.write(
+        form.entries
+            .map(
+              (e) =>
+                  '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}',
+            )
+            .join('&'),
+      );
     }
     final res = await req.close();
     for (final c in res.cookies) {
       _cookies[c.name] = c.value;
     }
     final body = await res.transform(utf8.decoder).join();
-    return (res.statusCode, body, res.headers.value(HttpHeaders.locationHeader));
+    return (
+      res.statusCode,
+      body,
+      res.headers.value(HttpHeaders.locationHeader),
+    );
   }
 
   Future<String> _get(String path, [Map<String, String>? q]) async {
@@ -63,12 +78,16 @@ class ErpClient {
   Future<void> login(String id, String password) async {
     await _get('login.htm');
     var (code, _, loc) = await _send(
-        'POST', Uri.parse('$_base/j_spring_security_check'),
-        form: {'j_username': id, 'j_password': password});
+      'POST',
+      Uri.parse('$_base/j_spring_security_check'),
+      form: {'j_username': id, 'j_password': password},
+    );
     var hops = 0;
     while (code >= 300 && code < 400 && loc != null && hops++ < 6) {
       if (loc.contains('login.htm') || loc.contains('error')) {
-        throw ErpException('ERP login failed (wrong ID/password, or OTP required)');
+        throw ErpException(
+          'ERP login failed (wrong ID/password, or OTP required)',
+        );
       }
       final r = await _send('GET', Uri.parse(_base).resolve(loc));
       code = r.$1;
@@ -89,9 +108,9 @@ class ErpClient {
       throw ErpException('Not logged in or ERP returned unexpected data');
     }
     final t = terms.cast<Map<String, dynamic>>().firstWhere(
-          (x) => x['terms2Status'] == true,
-          orElse: () => terms.last as Map<String, dynamic>,
-        );
+      (x) => x['terms2Status'] == true,
+      orElse: () => terms.last as Map<String, dynamic>,
+    );
     final body = await _get('stu_getSubjectOnChangeWithSemId1.json', {
       'termId': '${t['semesterId']}',
       'refreshData': '0',

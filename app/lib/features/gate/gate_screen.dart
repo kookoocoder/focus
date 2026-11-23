@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/store.dart';
 
 /// GATE 2028 (CSE) tracker. Topics are NOT hardcoded: they will be imported from
@@ -32,10 +33,19 @@ class _GateScreenState extends State<GateScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Add topic / lecture'),
-        content: TextField(controller: c, decoration: const InputDecoration(labelText: 'Title')),
+        content: TextField(
+          controller: c,
+          decoration: const InputDecoration(labelText: 'Title'),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Add'),
+          ),
         ],
       ),
     );
@@ -51,29 +61,36 @@ class _GateScreenState extends State<GateScreen> {
     final done = items.where((e) => e['done'] == true).length;
     return Scaffold(
       appBar: AppBar(title: const Text('GATE 2028')),
-      floatingActionButton: FloatingActionButton(onPressed: _add, child: const Icon(Icons.add)),
-      body: Column(children: [
-        Card(
-          margin: const EdgeInsets.all(12),
-          child: ListTile(
-            title: Text('$days days left (to Feb 2028)'),
-            subtitle: Text('$done / ${items.length} completed'),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _add,
+        child: const Icon(Icons.add),
+      ),
+      body: Column(
+        children: [
+          Card(
+            margin: const EdgeInsets.all(12),
+            child: ListTile(
+              title: Text('$days days left (to Feb 2028)'),
+              subtitle: Text('$done / ${items.length} completed'),
+            ),
           ),
-        ),
-        Expanded(
-          child: ListView(children: [
-            for (final e in items)
-              CheckboxListTile(
-                value: e['done'] == true,
-                title: Text(e['title']),
-                onChanged: (v) {
-                  e['done'] = v;
-                  _save();
-                },
-              ),
-          ]),
-        ),
-      ]),
+          Expanded(
+            child: ListView(
+              children: [
+                for (final e in items)
+                  CheckboxListTile(
+                    value: e['done'] == true,
+                    title: Text(e['title']),
+                    onChanged: (v) {
+                      e['done'] = v;
+                      _save();
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

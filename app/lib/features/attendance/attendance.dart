@@ -32,15 +32,19 @@ class Subject {
     return ((0.75 * total - attended) / 0.25).ceil();
   }
 
-  Map<String, dynamic> toJson() =>
-      {'name': name, 'isLab': isLab, 'attended': attended, 'total': total};
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'isLab': isLab,
+    'attended': attended,
+    'total': total,
+  };
 
   factory Subject.fromJson(Map<String, dynamic> j) => Subject(
-        name: j['name'],
-        isLab: j['isLab'] ?? false,
-        attended: j['attended'] ?? 0,
-        total: j['total'] ?? 0,
-      );
+    name: j['name'],
+    isLab: j['isLab'] ?? false,
+    attended: j['attended'] ?? 0,
+    total: j['total'] ?? 0,
+  );
 }
 
 /// Overall attendance across all subjects must stay above 50%.

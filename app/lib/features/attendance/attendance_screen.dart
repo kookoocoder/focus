@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/store.dart';
 import 'attendance.dart';
 import 'attendance_sync.dart';
@@ -45,38 +46,50 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         bottom: syncing
             ? const PreferredSize(
                 preferredSize: Size.fromHeight(2),
-                child: LinearProgressIndicator())
+                child: LinearProgressIndicator(),
+              )
             : null,
       ),
       body: RefreshIndicator(
         onRefresh: _sync,
-        child: ListView(padding: const EdgeInsets.all(12), children: [
-          if (error != null)
+        child: ListView(
+          padding: const EdgeInsets.all(12),
+          children: [
+            if (error != null)
+              Card(
+                color: Theme.of(context).colorScheme.errorContainer,
+                child: ListTile(
+                  title: const Text('ERP sync failed'),
+                  subtitle: Text(error!),
+                ),
+              ),
             Card(
-              color: Theme.of(context).colorScheme.errorContainer,
-              child: ListTile(title: const Text('ERP sync failed'), subtitle: Text(error!)),
-            ),
-          Card(
-            child: ListTile(
-              title: const Text('Overall (min 50%)'),
-              subtitle: Text(last == null
-                  ? 'Not synced yet'
-                  : 'Synced ${last.substring(0, 16).replaceFirst('T', ' ')}'),
-              trailing: Text('${overall.toStringAsFixed(1)}%',
+              child: ListTile(
+                title: const Text('Overall (min 50%)'),
+                subtitle: Text(
+                  last == null
+                      ? 'Not synced yet'
+                      : 'Synced ${last.substring(0, 16).replaceFirst('T', ' ')}',
+                ),
+                trailing: Text(
+                  '${overall.toStringAsFixed(1)}%',
                   style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: overall >= 50 ? Colors.green : Colors.red)),
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: overall >= 50 ? Colors.green : Colors.red,
+                  ),
+                ),
+              ),
             ),
-          ),
-          for (final s in theory) _tile(s),
-          if (labs.isNotEmpty)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(4, 16, 4, 4),
-              child: Text('Labs & non-theory (no 75% rule)'),
-            ),
-          for (final s in labs) _tile(s),
-        ]),
+            for (final s in theory) _tile(s),
+            if (labs.isNotEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(4, 16, 4, 4),
+                child: Text('Labs & non-theory (no 75% rule)'),
+              ),
+            for (final s in labs) _tile(s),
+          ],
+        ),
       ),
     );
   }
@@ -87,10 +100,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       child: ListTile(
         title: Text(s.name),
         subtitle: Text('${s.attended}/${s.total} · ${verdict(s)}'),
-        trailing: Text('${s.percent.toStringAsFixed(1)}%',
-            style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: ok ? Colors.green : Colors.red)),
+        trailing: Text(
+          '${s.percent.toStringAsFixed(1)}%',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: ok ? Colors.green : Colors.red,
+          ),
+        ),
       ),
     );
   }

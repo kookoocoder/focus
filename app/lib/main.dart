@@ -1,16 +1,17 @@
 import 'package:alarm/alarm.dart';
 import 'package:flutter/material.dart';
+
 import 'core/background.dart';
 import 'core/notifications.dart';
 import 'core/store.dart';
 import 'features/alarms/alarms.dart';
-import 'features/alarms/alarms_screen.dart';
 import 'features/alarms/ring_screen.dart';
 import 'features/attendance/attendance_screen.dart';
 import 'features/attendance/attendance_sync.dart';
 import 'features/diet/diet_screen.dart';
 import 'features/gate/gate_screen.dart';
 import 'features/gym/gym_screen.dart';
+import 'features/settings/settings_screen.dart';
 import 'features/timer/timer_screen.dart';
 
 Future<void> main() async {
@@ -19,7 +20,7 @@ Future<void> main() async {
   await Alarm.init();
   runApp(const FocusApp());
   _listenForRinging();
-  await scheduleAlarms();
+  await scheduleActivities();
   await Notifier.requestPermission();
   await scheduleBackgroundSync();
   if (Store.read<String>(lastSyncKey) == null) {
@@ -46,15 +47,16 @@ class FocusApp extends StatelessWidget {
   const FocusApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'Focus',
-        theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
-        darkTheme: ThemeData(
-            colorSchemeSeed: Colors.indigo,
-            brightness: Brightness.dark,
-            useMaterial3: true),
-        navigatorKey: navigatorKey,
-        home: const Home(),
-      );
+    title: 'Focus',
+    theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
+    darkTheme: ThemeData(
+      colorSchemeSeed: Colors.indigo,
+      brightness: Brightness.dark,
+      useMaterial3: true,
+    ),
+    navigatorKey: navigatorKey,
+    home: const Home(),
+  );
 }
 
 class Home extends StatefulWidget {
@@ -71,24 +73,30 @@ class _HomeState extends State<Home> {
     DietScreen(),
     GateScreen(),
     TimerScreen(),
-    AlarmsScreen(),
+    SettingsScreen(),
   ];
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        body: IndexedStack(index: i, children: pages),
-        bottomNavigationBar: NavigationBar(
-          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-          selectedIndex: i,
-          onDestinationSelected: (v) => setState(() => i = v),
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.fact_check_outlined), label: 'Attendance'),
-            NavigationDestination(icon: Icon(Icons.fitness_center), label: 'Gym'),
-            NavigationDestination(icon: Icon(Icons.restaurant), label: 'Diet'),
-            NavigationDestination(icon: Icon(Icons.school_outlined), label: 'GATE'),
-            NavigationDestination(icon: Icon(Icons.timer_outlined), label: 'Focus'),
-            NavigationDestination(icon: Icon(Icons.alarm), label: 'Alarms'),
-          ],
+    body: IndexedStack(index: i, children: pages),
+    bottomNavigationBar: NavigationBar(
+      labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+      selectedIndex: i,
+      onDestinationSelected: (v) => setState(() => i = v),
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.fact_check_outlined),
+          label: 'Attendance',
         ),
-      );
+        NavigationDestination(icon: Icon(Icons.fitness_center), label: 'Gym'),
+        NavigationDestination(icon: Icon(Icons.restaurant), label: 'Diet'),
+        NavigationDestination(icon: Icon(Icons.school_outlined), label: 'GATE'),
+        NavigationDestination(icon: Icon(Icons.timer_outlined), label: 'Focus'),
+        NavigationDestination(
+          icon: Icon(Icons.settings_outlined),
+          label: 'Settings',
+        ),
+      ],
+    ),
+  );
 }
