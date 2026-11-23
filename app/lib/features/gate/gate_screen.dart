@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'pw_auto_refresh.dart';
 import 'pw_connect_screen.dart';
 import 'pw_data.dart';
 
@@ -17,6 +18,7 @@ class _GateScreenState extends State<GateScreen> {
   // GATE 2028 exam date is not announced yet; Feb 2028 is the target.
   static final target = DateTime(2028, 2, 1);
   PwCourse course = PwCourse.load();
+  bool autoRefreshing = PwAutoRefresh.due;
 
   @override
   void initState() {
