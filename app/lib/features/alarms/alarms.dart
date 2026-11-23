@@ -61,8 +61,9 @@ List<Activity> _defaults() => [
   Activity('wake', 'Wake up', 6, 0),
   Activity('gymMorning', 'Gym (morning)', 7, 0, enabled: true),
   Activity('gymEvening', 'Gym (evening)', 18, 0),
-  Activity('pwLecture', 'PW lecture', 20, 0, enabled: true),
-];
+      Activity('pwLecture', 'PW lecture', 20, 0, enabled: true),
+      Activity('diet', 'Log your diet', 21, 30, enabled: true, alarm: false),
+    ];
 
 List<Activity> loadActivities() {
   final saved = Store.read<Map<String, dynamic>>(_activitiesKey) ?? {};
