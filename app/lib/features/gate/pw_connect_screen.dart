@@ -1,87 +1,26 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
 import 'pw_data.dart';
+import 'pw_webview.dart';
 
-/// Opens PW in a WebView so you log in with your own OTP. While PW loads your
-/// batch, its course/progress/schedule responses are read into [PwCourse].
-/// Nothing leaves the phone and no login token is stored by Focus.
+/// Visible PW login/browse screen. Needed once (and again only if PW logs you out).
 class PwConnectScreen extends StatefulWidget {
   const PwConnectScreen({super.key});
   @override
   State<PwConnectScreen> createState() => _PwConnectScreenState();
 }
 
-const pwHook = r'''
-(function () {
-  if (window.__focusHook) return;
-  window.__focusHook = true;
-  const want = (u) => /api\.penpencil\.co\/.*(\/v3\/batches\/[^/]+\/details|\/subject\/progress|\/todays-schedule)/i.test(u);
-  const send = (url, body) => {
-    try {
-      if (body && body[0] === '{') FocusCapture.postMessage(JSON.stringify({url, body, page: location.href}));
-    } catch (e) {}
-  };
-  const of = window.fetch;
-  window.fetch = async function (input) {
-    const res = await of.apply(this, arguments);
-    try {
-      const url = typeof input === 'string' ? input : input.url;
-      if (want(url)) res.clone().text().then((t) => send(url, t));
-    } catch (e) {}
-    return res;
-  };
-  const oo = XMLHttpRequest.prototype.open, os = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.open = function (m, u) { this.__u = u; return oo.apply(this, arguments); };
-  XMLHttpRequest.prototype.send = function () {
-    this.addEventListener('load', () => {
-      try { if (want(this.__u)) send(this.__u, this.responseText); } catch (e) {}
-    });
-    return os.apply(this, arguments);
-  };
-})();
-''';
-
 class _PwConnectScreenState extends State<PwConnectScreen> {
-  late final WebViewController _c;
   final course = PwCourse.load();
-  int captured = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _c = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..addJavaScriptChannel(
-        'FocusCapture',
-        onMessageReceived: (m) {
-          final j = jsonDecode(m.message) as Map<String, dynamic>;
-          final kind = course.ingest(j['url'], j['body']);
-          if (kind != null) {
-            course.save();
-            rememberPwPage(kind, j['page']);
-            setState(() => captured++);
-          }
-        },
-      )
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          // Truecaller and other app links can't open in a WebView; stay on the
-          // page so PW falls back to SMS OTP.
-          onNavigationRequest: (r) => r.url.startsWith('http')
-              ? NavigationDecision.navigate
-              : NavigationDecision.prevent,
-          onPageStarted: (_) => _c.runJavaScript(pwHook),
-          onPageFinished: (_) => _c.runJavaScript(pwHook),
-        ),
-      )
-      ..loadRequest(Uri.parse('https://www.pw.live/study-v2/batches'));
-  }
+  final kinds = <String>{};
 
   @override
   Widget build(BuildContext context) {
+    final hint = kinds.contains('progress')
+        ? 'All set ✓'
+        : kinds.isEmpty
+        ? 'Open your batch'
+        : 'Now open Subjects';
     return Scaffold(
       appBar: AppBar(
         title: const Text('Connect PW'),
@@ -89,14 +28,16 @@ class _PwConnectScreenState extends State<PwConnectScreen> {
           Center(
             child: Padding(
               padding: const EdgeInsets.only(right: 16),
-              child: Text(
-                captured == 0 ? 'Open your batch' : '$captured updated ✓',
-              ),
+              child: Text(hint),
             ),
           ),
         ],
       ),
-      body: WebViewWidget(controller: _c),
+      body: PwWebView(
+        url: 'https://www.pw.live/study-v2/batches',
+        course: course,
+        onCaptured: (k) => setState(() => kinds.add(k)),
+      ),
     );
   }
 }

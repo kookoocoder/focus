@@ -40,8 +40,8 @@ dependencies:
   flutter_local_notifications: ^23.0.3
   timezone: ^0.11.2
   alarm: ^5.15.0
-  webview_flutter: ^4.14.1
   path_provider: ^2.1.6
+  flutter_inappwebview: ^6.1.5
 
 dev_dependencies:
   flutter_test:

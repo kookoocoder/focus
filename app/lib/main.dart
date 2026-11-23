@@ -11,6 +11,7 @@ import 'features/attendance/attendance_sync.dart';
 import 'features/diet/diet_screen.dart';
 import 'features/gate/gate_screen.dart';
 import 'features/gym/gym_screen.dart';
+import 'features/scroll/scroll_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/timer/timer_screen.dart';
 
@@ -73,6 +74,7 @@ class _HomeState extends State<Home> {
     DietScreen(),
     GateScreen(),
     TimerScreen(),
+    ScrollScreen(),
     SettingsScreen(),
   ];
 
@@ -92,6 +94,7 @@ class _HomeState extends State<Home> {
         NavigationDestination(icon: Icon(Icons.restaurant), label: 'Diet'),
         NavigationDestination(icon: Icon(Icons.school_outlined), label: 'GATE'),
         NavigationDestination(icon: Icon(Icons.timer_outlined), label: 'Focus'),
+        NavigationDestination(icon: Icon(Icons.swipe_vertical), label: 'Scroll'),
         NavigationDestination(
           icon: Icon(Icons.settings_outlined),
           label: 'Settings',

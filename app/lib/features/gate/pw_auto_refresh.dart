@@ -1,11 +1,8 @@
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-import 'pw_connect_screen.dart';
 import 'pw_data.dart';
+import 'pw_webview.dart';
 
 /// Invisible 1x1 WebView that reloads the remembered PW pages so PW's own
 /// site fetches fresh data, then calls [onDone]. Uses PW's saved web login.
@@ -26,36 +23,12 @@ class PwAutoRefresh extends StatefulWidget {
 }
 
 class _PwAutoRefreshState extends State<PwAutoRefresh> {
-  late final WebViewController _c;
   final course = PwCourse.load();
+  final pages = pwPages().values.toSet().toList();
 
-  @override
-  void initState() {
-    super.initState();
-    _c = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..addJavaScriptChannel(
-        'FocusCapture',
-        onMessageReceived: (m) {
-          final j = jsonDecode(m.message) as Map<String, dynamic>;
-          if (course.ingest(j['url'], j['body']) != null) course.save();
-        },
-      )
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onNavigationRequest: (r) => r.url.startsWith('http')
-              ? NavigationDecision.navigate
-              : NavigationDecision.prevent,
-          onPageStarted: (_) => _c.runJavaScript(pwHook),
-          onPageFinished: (_) => _c.runJavaScript(pwHook),
-        ),
-      );
-    _run();
-  }
-
-  Future<void> _run() async {
-    for (final page in pwPages().values.toSet()) {
-      await _c.loadRequest(Uri.parse(page));
+  Future<void> _run(InAppWebViewController c) async {
+    for (var i = 0; i < pages.length; i++) {
+      if (i > 0) await c.loadUrl(urlRequest: URLRequest(url: WebUri(pages[i])));
       await Future.delayed(const Duration(seconds: 15));
       if (!mounted) return;
     }
@@ -63,6 +36,9 @@ class _PwAutoRefreshState extends State<PwAutoRefresh> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      SizedBox(width: 1, height: 1, child: WebViewWidget(controller: _c));
+  Widget build(BuildContext context) => SizedBox(
+    width: 1,
+    height: 1,
+    child: PwWebView(url: pages.first, course: course, onCreated: _run),
+  );
 }

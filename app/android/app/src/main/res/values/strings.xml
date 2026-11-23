@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="scroll_service_desc">Counts scrolls and swipes in apps such as YouTube Shorts and Instagram Reels so Focus can show usage and enforce your daily limit. Nothing leaves your device.</string>
+</resources>
