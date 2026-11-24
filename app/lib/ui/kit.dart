@@ -79,25 +79,34 @@ class FocusPage extends StatelessWidget {
     final tabs = SubTabs.maybeOf(context);
     Widget list = ListView(
       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 130),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 130),
       children: [
         if (tabs != null)
           Padding(
-            padding: EdgeInsets.fromLTRB(0, 8, 0, 4),
+            padding: EdgeInsets.only(top: 12),
             child: _SubTabBar(tabs: tabs, hue: hue),
           ),
         Padding(
-          padding: EdgeInsets.fromLTRB(4, 8, 0, 18),
+          padding: EdgeInsets.fromLTRB(4, tabs != null ? 22 : 18, 0, 20),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (subtitle != null)
-                      Text(subtitle!.toUpperCase(), style: Typo.label.copyWith(color: hue)),
-                    SizedBox(height: 6),
+                      AnimatedSwitcher(
+                        duration: Motion.fast,
+                        child: Text(
+                          subtitle!.toUpperCase(),
+                          key: ValueKey(subtitle),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Typo.label.copyWith(color: hue),
+                        ),
+                      ),
+                    SizedBox(height: 8),
                     animateTitle
                         ? TextScramble(title, speed: 34, style: Typo.title)
                         : Text(title, style: Typo.title),
@@ -110,7 +119,8 @@ class FocusPage extends StatelessWidget {
             ],
           ),
         ),
-        ...children,
+        for (final (n, c) in children.indexed)
+          animateTitle ? Rise(index: n, child: c) : c,
       ],
     );
     if (onRefresh != null) {
@@ -166,6 +176,44 @@ class FocusPage extends StatelessWidget {
   }
 }
 
+/// Fades and lifts its child in once, [index] steps after the page appears,
+/// so page content arrives in order instead of all at once.
+class Rise extends StatefulWidget {
+  const Rise({super.key, required this.index, required this.child});
+  final int index;
+  final Widget child;
+  @override
+  State<Rise> createState() => _RiseState();
+}
+
+class _RiseState extends State<Rise> with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(vsync: this, duration: Motion.base);
+  late final _a = CurvedAnimation(parent: _c, curve: Motion.curve);
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(Motion.stagger * math.min(widget.index, 8), () {
+      if (mounted) _c.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+    opacity: _a,
+    child: SlideTransition(
+      position: Tween(begin: const Offset(0, .08), end: Offset.zero).animate(_a),
+      child: widget.child,
+    ),
+  );
+}
+
 class _SubTabBar extends StatelessWidget {
   const _SubTabBar({required this.tabs, required this.hue});
   final SubTabs tabs;
@@ -180,40 +228,58 @@ class _SubTabBar extends StatelessWidget {
       border: Border.all(color: Dissolve.border),
       boxShadow: Dissolve.lift,
     ),
-    child: Row(
+    child: Stack(
       children: [
-        for (final (n, l) in tabs.labels.indexed)
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                if (n != tabs.index) HapticFeedback.selectionClick();
-                tabs.onSelect(n);
-              },
-              child: Container(
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: n == tabs.index ? hue : null,
-                  gradient: n == tabs.index && Dissolve.light
-                      ? LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Color.lerp(hue, Colors.white, .15)!, hue],
-                        )
-                      : null,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  l,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    color: n == tabs.index ? Dissolve.ink : Dissolve.muted,
-                  ),
-                ),
+        AnimatedAlign(
+          duration: Motion.base,
+          curve: Motion.curve,
+          alignment: Alignment(
+            tabs.labels.length == 1 ? 0 : -1 + 2 * tabs.index / (tabs.labels.length - 1),
+            0,
+          ),
+          child: FractionallySizedBox(
+            widthFactor: 1 / tabs.labels.length,
+            heightFactor: 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: hue,
+                gradient: Dissolve.light
+                    ? LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color.lerp(hue, Colors.white, .15)!, hue],
+                      )
+                    : null,
+                borderRadius: BorderRadius.circular(16),
               ),
             ),
           ),
+        ),
+        Row(
+          children: [
+            for (final (n, l) in tabs.labels.indexed)
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    if (n != tabs.index) HapticFeedback.selectionClick();
+                    tabs.onSelect(n);
+                  },
+                  child: Center(
+                    child: AnimatedDefaultTextStyle(
+                      duration: Motion.fast,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: n == tabs.index ? Dissolve.ink : Dissolve.muted,
+                      ),
+                      child: Text(l),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ],
     ),
   );
@@ -297,8 +363,8 @@ class NumberTicker extends StatelessWidget {
       for (final (i, ch) in text.split('').indexed)
         ClipRect(
           child: AnimatedSwitcher(
-            duration: Duration(milliseconds: 380 + i * 40),
-            switchInCurve: Curves.easeOutCubic,
+            duration: Motion.base,
+            switchInCurve: Motion.curve,
             switchOutCurve: Curves.easeInCubic,
             transitionBuilder: (child, a) {
               final incoming = child.key == ValueKey('$i$ch');
@@ -343,8 +409,8 @@ class Ring extends StatelessWidget {
       final side = math.min(size, box.maxWidth);
       return TweenAnimationBuilder<double>(
         tween: Tween(end: value.clamp(0, 1)),
-        duration: Duration(milliseconds: 1100),
-        curve: Curves.easeOutCubic,
+        duration: Motion.slow,
+        curve: Motion.curve,
         builder: (_, v, child) => CustomPaint(
           painter: _RingPainter(v, stroke, color),
           child: SizedBox.square(
@@ -415,8 +481,8 @@ class Bar extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: TweenAnimationBuilder<double>(
         tween: Tween(end: value.clamp(0, 1)),
-        duration: const Duration(milliseconds: 900),
-        curve: Curves.easeOutCubic,
+        duration: Motion.slow,
+        curve: Motion.curve,
         builder: (_, v, _) => FractionallySizedBox(
           widthFactor: v,
           child: DecoratedBox(

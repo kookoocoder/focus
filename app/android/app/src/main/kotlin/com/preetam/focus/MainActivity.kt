@@ -1,6 +1,9 @@
 package com.preetam.focus
 
+import android.app.AppOpsManager
 import android.content.ComponentName
+import android.os.Process
+import io.flutter.plugin.common.EventChannel
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -56,14 +59,72 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "focus/app")
-            .setMethodCallHandler { call, result ->
+        app = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "focus/app").apply {
+            setMethodCallHandler { call, result ->
                 when (call.method) {
                     "version" -> result.success(version())
                     "install" -> result.success(install(call.argument<String>("path")!!))
+                    "launchAction" -> {
+                        result.success(pendingAction)
+                        pendingAction = null
+                    }
+                    "usageAccess" -> result.success(usageAccess())
+                    "openUsageAccess" -> {
+                        startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                        result.success(null)
+                    }
+                    "usage" -> result.success(Usage.report(this@MainActivity, call.argument<Int>("days") ?: 7))
+                    "bubbleState" -> result.success(mapOf(
+                        "on" to AssistantBubble.isOn(this@MainActivity),
+                        "canDraw" to AssistantBubble.canDraw(this@MainActivity)))
+                    "setBubble" -> {
+                        val on = call.argument<Boolean>("on") ?: false
+                        when {
+                            !on -> AssistantBubble.stop(this@MainActivity)
+                            AssistantBubble.canDraw(this@MainActivity) -> AssistantBubble.start(this@MainActivity)
+                            else -> startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:$packageName")))
+                        }
+                        result.success(AssistantBubble.isOn(this@MainActivity) && AssistantBubble.canDraw(this@MainActivity))
+                    }
                     else -> result.notImplemented()
                 }
             }
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "focus/tts")
+            .setMethodCallHandler { call, result ->
+                val dir = call.argument<String>("dir") ?: ""
+                when (call.method) {
+                    "ready" -> result.success(PhononSpeaker.modelReady(dir))
+                    "warm" -> { PhononSpeaker.warm(dir); result.success(null) }
+                    "speak" -> result.success(PhononSpeaker.speak(dir, call.argument<String>("text") ?: ""))
+                    "stop" -> { PhononSpeaker.stop(); result.success(null) }
+                    else -> result.notImplemented()
+                }
+            }
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "focus/tts/events")
+            .setStreamHandler(PhononSpeaker)
+    }
+
+    private var app: MethodChannel? = null
+    private var pendingAction: String? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (intent?.action == AssistantBubble.ACTION_OPEN) pendingAction = "assistant"
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == AssistantBubble.ACTION_OPEN) app?.invokeMethod("openAssistant", null)
+    }
+
+    private fun usageAccess(): Boolean {
+        val ops = getSystemService(APP_OPS_SERVICE) as AppOpsManager
+        val mode = if (Build.VERSION.SDK_INT >= 29)
+            ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), packageName)
+        else @Suppress("DEPRECATION") ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), packageName)
+        return mode == AppOpsManager.MODE_ALLOWED
     }
 
     /// Opens Accessibility settings scrolled to (and on most OEMs highlighting)

@@ -48,19 +48,22 @@ Future<(String, bool)> askAssistant(
 ) async {
   var changed = false;
   final system =
-      'You are the assistant inside the Focus app, which manages attendance, '
-      'GATE prep, diet, gym, reminders/alarms, focus timer and scroll control. '
-      'You have full control of the app: prefer the specific tools, and use '
-      'list_data/read_data/write_data for anything else stored on the device '
-      '(read a key before writing it and keep its shape). Never invent data. '
-      'Confirm with the user before deleting or overwriting a lot. Be brief. '
-      'Today is '
-      '${DateTime.now().toIso8601String()}.';
+      'You are the personal agent inside the Focus app, working for one user. '
+      'Always address him as "boss". The app manages attendance, GATE prep, '
+      'diet, gym, reminders/alarms and scroll control, and you have full '
+      'control of it: when the boss asks for something, do it with your tools '
+      'right away instead of explaining how. Chain as many tools as needed. '
+      'Prefer the specific tools; use list_data/read_data/write_data for '
+      'anything else stored on the device (read a key before writing it and '
+      'keep its shape). Never invent data. Only ask first before deleting or '
+      'overwriting a lot. Replies are often read aloud: keep them short, '
+      'plain sentences, no markdown or lists. Now is '
+      '${DateTime.now()} (${const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][DateTime.now().weekday - 1]}).';
   final messages = [
     {'role': 'system', 'content': system},
     ...history,
   ];
-  for (var turn = 0; turn < 8; turn++) {
+  for (var turn = 0; turn < 12; turn++) {
     final res = await http.post(
       Uri.parse('https://api.deepseek.com/chat/completions'),
       headers: {

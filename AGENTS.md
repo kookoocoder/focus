@@ -1,23 +1,31 @@
 # AGENTS.md
 
 Personal Android app (Flutter, `app/`) for one college student: ERP attendance,
-GATE 2028 prep from PW, gym/diet log, focus timer, scroll control, reminders, and
-an AI assistant (the orb). Working name "Focus"; a better name is still open.
+GATE 2028 prep from PW, gym/diet/weight log, focus timer, scroll control,
+phone usage summary, reminders, and an AI assistant (the orb). Working name
+"Focus"; a better name is still open.
 
 ## Layout
 
-- `app/lib/main.dart` - shell. Bottom nav has **4 tabs only**: Classes
-  (attendance), GATE, Body (Gym | Diet), Focus (Timer | Scroll), plus the
-  assistant orb. Settings opens from the gear in every page header. Don't add
-  nav tabs; put new screens behind a `SubTabs` split or in Settings.
+- `app/lib/main.dart` - shell. Bottom nav has **5 tabs**: Today (overview),
+  GATE, Body (Gym | Diet | Weight), Focus (Timer | Scroll | Usage), Classes
+  (attendance). Plus the assistant orb. Settings opens from the gear in every
+  page header. Don't add nav tabs; put new screens behind a `SubTabs` split or
+  in Settings.
+- First launch runs `OnboardingScreen` (ERP connect → BMI goal → floating
+  bubble). ERP credentials are entered by the user and stored in secure
+  storage — never baked into the build.
 - `app/lib/ui/` - design system. `tokens.dart` holds colors (`Dissolve`), one
-  hue per section (`Hue`) and the type scale (`Typo`). `kit.dart` holds
-  `FocusPage`, `Panel`, `Ring`, `Bar`, `SectionLabel`, `SubTabs`.
+  hue per section (`Hue`), the type scale (`Typo`) and shared motion timings
+  (`Motion`). `kit.dart` holds `FocusPage`, `Panel`, `Ring`, `Bar`,
+  `SectionLabel`, `SubTabs`, `Rise`.
 - `app/lib/features/<name>/` - one folder per feature.
 - `app/lib/core/` - storage (`Store`, shared prefs), secrets, notifications,
   background sync, `updater.dart` (in-app updates).
 - `app/android/.../kotlin/com/preetam/focus/` - `MainActivity` (method channels
-  `focus/scroll`, `focus/app`), `ScrollService` (accessibility service).
+  `focus/scroll`, `focus/app`, `focus/tts`), `ScrollService`, `AssistantBubble`
+  (overlay), `PhononSpeaker` / `PhononTTS` (on-device TTS), `Usage` (Digital
+  Wellbeing-style screen time).
 
 ## UI rules (from user feedback)
 
@@ -28,10 +36,13 @@ an AI assistant (the orb). Working name "Focus"; a better name is still open.
   ad-hoc font sizes or hairline weights (w100-w300) for numbers.
 - Progress tracks use `Dissolve.track`, not `raised` (too low contrast).
   Rings clamp to available width; never hard-size beyond ~300.
-- Keep motion purposeful. No decorative animation in Settings. Hidden tabs are
-  wrapped in `TickerMode(enabled: false)`; keep it that way, the user's phone is
-  slow and animations in hidden tabs made the orb miss taps.
-- Gym is intentionally just a workout + rest timer and a log. Keep it simple.
+- Motion uses `Motion.fast` / `base` / `slow` / `stagger` and `Motion.curve`
+  so every screen feels even. Keep motion purposeful. No decorative animation
+  in Settings. Hidden tabs are wrapped in `TickerMode(enabled: false)`.
+- Attendance tab shows overall + subjects below 75%; full list is behind
+  Details. Gym is intentionally just a workout + rest timer and a log.
+- Assistant: typed replies stay silent; mic mode speaks back (Phonon when
+  downloaded, else system TTS) and the reply text rolls out with the voice.
 
 ## Data
 
@@ -43,9 +54,19 @@ tools `edit_subject` / `mark_lecture` (`features/assistant/tools.dart`).
 ## Secrets
 
 `.env` at repo root (git-ignored, template in `.env.example`) is baked in with
-`--dart-define-from-file=../.env`: `ERP_*`, `DEEPSEEK_API_KEY`, and
-`GITHUB_TOKEN` (fine-grained, read-only Contents on `kookoocoder/focus`; the
-repo is private and the updater needs it to read releases).
+`--dart-define-from-file=../.env`: `DEEPSEEK_API_KEY` and `GITHUB_TOKEN`
+(fine-grained, read-only Contents on `kookoocoder/focus`; the repo is private
+and the updater needs it to read releases). ERP ID/password are **not** in
+`.env` — users enter them in onboarding or Settings → College ERP.
+
+## Voice (Phonon)
+
+On-device TTS from [gradium-ai/xn-ptts](https://github.com/gradium-ai/xn-ptts)
+(Phonon 31m, Apache 2.0). Native library lives at
+`android/app/src/main/jniLibs/arm64-v8a/libptts_ffi.so` (rebuild with
+`ANDROID_NDK_HOME=… ./android/build.sh` in a checkout of xn-ptts). The ~64 MB
+model downloads on first request from Hugging Face into app support storage
+(Settings → Voice). Until then, replies fall back to system TTS.
 
 ## Versions and in-app updates
 
@@ -80,6 +101,8 @@ adb install -r build/app/outputs/flutter-apk/app-debug.apk
 - Scroll control needs the accessibility service. Its label is "Focus". On
   Android 11 OEM skins it's under "Downloaded apps"/"Installed services"; the
   in-app "Open settings" button deep-links and highlights it where supported.
+- Floating assistant needs "Display over other apps". Usage summary needs
+  "Usage access" (same source as Digital Wellbeing).
 
 ## Open items
 

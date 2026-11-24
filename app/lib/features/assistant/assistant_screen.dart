@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../ui/effects.dart';
 import '../../ui/thinking_orb.dart';
 import '../../ui/tokens.dart';
 import 'llm.dart';
+import 'voice.dart';
 
 const _suggestions = [
   'I ate 2 eggs',
@@ -12,9 +14,11 @@ const _suggestions = [
   'How many classes can I skip?',
   "What's my protein today?",
   'Remind me to study at 9pm',
+  'Wake me up in 20 minutes',
 ];
 
 /// Chat UI. Pops with `true` if the assistant changed any app data.
+/// Typed replies stay silent; mic mode speaks back and reveals text with speech.
 class AssistantScreen extends StatefulWidget {
   const AssistantScreen({super.key});
   @override
@@ -26,7 +30,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
   final _focus = FocusNode();
   final _scroll = ScrollController();
   final _history = <Map<String, dynamic>>[];
-  final _shown = <(bool, String)>[];
+  final _shown = <_Msg>[];
   String? _status;
   OrbState _orb = OrbState.idle;
   bool _changed = false;
@@ -34,10 +38,36 @@ class _AssistantScreenState extends State<AssistantScreen> {
   bool _hasText = false;
   bool _keyOpen = false;
   final _keyC = TextEditingController();
+  final _stt = SpeechToText();
+  late final VoiceOut _voiceOut;
+  bool _sttReady = false;
+  bool _voice = false;
 
   @override
   void initState() {
     super.initState();
+    _voiceOut = VoiceOut(
+      onPos: (pos) {
+        if (!mounted || _shown.isEmpty || _shown.last.me) return;
+        setState(() {
+          _shown.last.spoken = pos;
+          _orb = OrbState.speaking;
+        });
+        _toBottom();
+      },
+      onDone: () {
+        if (!mounted) return;
+        setState(() {
+          if (_shown.isNotEmpty && !_shown.last.me) {
+            _shown.last.spoken = _shown.last.text.length;
+            _shown.last.speaking = false;
+          }
+          _orb = OrbState.done;
+        });
+        if (_voice) _listen();
+      },
+    );
+    _voiceOut.init();
     AssistantKey.load().then((_) {
       if (mounted) setState(() => _keyOpen = !assistantConfigured);
     });
@@ -51,6 +81,8 @@ class _AssistantScreenState extends State<AssistantScreen> {
   void dispose() {
     _c.dispose();
     _keyC.dispose();
+    _stt.stop();
+    _voiceOut.dispose();
     _focus.dispose();
     _scroll.dispose();
     super.dispose();
@@ -60,16 +92,17 @@ class _AssistantScreenState extends State<AssistantScreen> {
     if (!_scroll.hasClients) return;
     _scroll.animateTo(
       _scroll.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 450),
-      curve: Curves.easeOutCubic,
+      duration: Motion.base,
+      curve: Motion.curve,
     );
   });
 
   Future<void> _send([String? preset]) async {
     final text = (preset ?? _c.text).trim();
     if (text.isEmpty || _status != null) return;
+    final fromVoice = _voice && preset == null;
     _c.clear();
-    _shown.add((true, text));
+    _shown.add(_Msg(me: true, text: text));
     _history.add({'role': 'user', 'content': text});
     setState(() {
       _status = 'Thinking';
@@ -77,33 +110,93 @@ class _AssistantScreenState extends State<AssistantScreen> {
     });
     _toBottom();
     var failed = false;
+    String reply = '';
     try {
-      final (reply, changed) = await askAssistant(_history, (s) {
+      final (r, changed) = await askAssistant(_history, (s) {
         if (!mounted) return;
         setState(() {
           _status = s.replaceAll('…', '').replaceAll('_', ' ');
           _orb = OrbState.searching;
         });
       });
+      reply = r;
       _changed |= changed;
-      _shown.add((false, reply));
+      _shown.add(_Msg(me: false, text: reply, speaking: fromVoice));
     } catch (e) {
       failed = true;
-      _shown.add((false, 'Error: $e'));
+      _shown.add(_Msg(me: false, text: 'Error: $e'));
     }
     if (!mounted) return;
     setState(() {
       _status = null;
-      _orb = failed ? OrbState.error : OrbState.done;
+      _orb = failed ? OrbState.error : (fromVoice ? OrbState.speaking : OrbState.done);
     });
     _toBottom();
+    if (fromVoice && !failed) {
+      final plain = reply.replaceAll(RegExp(r'[*_#`>]'), '');
+      if (plain.trim().isEmpty) {
+        _listen();
+      } else {
+        await _voiceOut.speak(plain);
+      }
+      return;
+    }
     await Future<void>.delayed(const Duration(milliseconds: 1800));
+    if (mounted && _status == null && !_voice) setState(() => _orb = OrbState.idle);
+  }
+
+  Future<void> _toggleVoice() async {
+    HapticFeedback.selectionClick();
+    if (_voice) return _stopVoice();
+    _sttReady = _sttReady ||
+        await _stt.initialize(
+          onStatus: (s) {
+            if (s == 'done' && _voice && _status == null && _c.text.trim().isEmpty) {
+              _stopVoice();
+            }
+          },
+          onError: (_) => _stopVoice(),
+        );
+    if (!_sttReady) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Speech recognition is not available, boss.')),
+        );
+      }
+      return;
+    }
+    _voice = true;
+    _listen();
+  }
+
+  void _stopVoice() {
+    _voice = false;
+    _stt.stop();
+    _voiceOut.stop();
     if (mounted && _status == null) setState(() => _orb = OrbState.idle);
+  }
+
+  void _listen() {
+    if (!_voice || _status != null || !mounted) return;
+    _c.clear();
+    setState(() => _orb = OrbState.listening);
+    _stt.listen(
+      listenOptions: SpeechListenOptions(
+        pauseFor: const Duration(seconds: 3),
+        listenFor: const Duration(minutes: 1),
+      ),
+      onResult: (r) {
+        if (!mounted) return;
+        _c.text = r.recognizedWords;
+        if (r.finalResult && r.recognizedWords.trim().isNotEmpty) _send();
+      },
+    );
   }
 
   void _clear() {
     if (_shown.isEmpty || _status != null) return;
     HapticFeedback.mediumImpact();
+    _voiceOut.stop();
     setState(() => _clearing = true);
   }
 
@@ -122,7 +215,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
           scaffoldBackgroundColor: Dissolve.bg,
           textSelectionTheme: TextSelectionThemeData(
             cursorColor: Dissolve.accent,
-            selectionColor: Color(0x55A5B4FC),
+            selectionColor: const Color(0x55A5B4FC),
           ),
         ),
         child: Scaffold(
@@ -136,7 +229,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                     if (_keyOpen) _keyPanel(),
                     Expanded(
                       child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 400),
+                        duration: Motion.base,
                         child: _shown.isEmpty ? _empty() : _thread(),
                       ),
                     ),
@@ -161,7 +254,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         ),
         const SizedBox(width: 12),
         AnimatedOpacity(
-          duration: const Duration(milliseconds: 300),
+          duration: Motion.fast,
           opacity: _shown.isEmpty ? 0 : 1,
           child: ThinkingOrb(state: _orb, size: 30, dots: 90, dotSize: 2),
         ),
@@ -183,6 +276,8 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 switch (_orb) {
                   OrbState.thinking => 'thinking',
                   OrbState.searching => 'using tools',
+                  OrbState.listening => 'listening',
+                  OrbState.speaking => 'speaking',
                   OrbState.done => 'done',
                   OrbState.error => 'something went wrong',
                   _ => 'online',
@@ -192,6 +287,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                   color: switch (_orb) {
                     OrbState.done => Dissolve.success,
                     OrbState.error => Dissolve.danger,
+                    OrbState.speaking => Dissolve.accent,
                     _ => Dissolve.muted,
                   },
                   fontSize: 12,
@@ -207,7 +303,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         ),
         const SizedBox(width: 8),
         AnimatedOpacity(
-          duration: const Duration(milliseconds: 250),
+          duration: Motion.fast,
           opacity: _shown.isEmpty ? 0 : 1,
           child: _IconPill(icon: Icons.blur_on_rounded, onTap: _clear),
         ),
@@ -237,9 +333,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
       decoration: BoxDecoration(
         color: Dissolve.surface.withValues(alpha: .92),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: ok ? Dissolve.border : Dissolve.danger.withValues(alpha: .35),
-        ),
+        border: Border.all(color: ok ? Dissolve.border : Dissolve.danger.withValues(alpha: .35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -288,13 +382,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ThinkingOrb(
-              state: _orb,
-              size: 190,
-              dots: 260,
-              dotSize: 2.2,
-              interactive: true,
-            ),
+            ThinkingOrb(state: _orb, size: 190, dots: 260, dotSize: 2.2, interactive: true),
             const SizedBox(height: 36),
             TextScramble(
               'How can I help?',
@@ -316,8 +404,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
               height: 40,
               child: Marquee(
                 children: [
-                  for (final s in _suggestions)
-                    _Chip(label: s, onTap: () => _send(s)),
+                  for (final s in _suggestions) _Chip(label: s, onTap: () => _send(s)),
                 ],
               ),
             ),
@@ -336,18 +423,18 @@ class _AssistantScreenState extends State<AssistantScreen> {
         if (i == _shown.length) {
           return _ThinkingRow(key: const ValueKey('status'), status: _status!, orb: _orb);
         }
-        final (me, t) = _shown[i];
+        final m = _shown[i];
         return Grains(
           key: ValueKey(i),
-          color: me ? Dissolve.accent : Dissolve.fg,
-          child: me ? _UserBubble(t) : _AssistantMessage(t),
+          color: m.me ? Dissolve.accent : Dissolve.fg,
+          child: m.me ? _UserBubble(m.text) : _AssistantMessage(m),
         );
       },
     );
     if (_clearing) {
       list = Grains(
         reverse: true,
-        duration: const Duration(milliseconds: 900),
+        duration: Motion.slow,
         onDone: () => setState(() {
           _shown.clear();
           _history.clear();
@@ -369,7 +456,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         borderRadius: BorderRadius.circular(28),
         border: Border.all(color: Dissolve.border),
         boxShadow: [
-          BoxShadow(color: Dissolve.shadow, blurRadius: 30, offset: Offset(0, 10)),
+          BoxShadow(color: Dissolve.shadow, blurRadius: 30, offset: const Offset(0, 10)),
         ],
       ),
       child: Row(
@@ -387,32 +474,37 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 onSubmitted: (_) => _send(),
                 style: TextStyle(color: Dissolve.fg, fontSize: 15.5, height: 1.35),
                 decoration: InputDecoration(
-                  hintText: 'Ask or tell me anything…',
+                  hintText: _voice ? 'Listening, boss…' : 'Ask or tell me anything…',
                   hintStyle: TextStyle(color: Dissolve.muted),
                   border: InputBorder.none,
                   isDense: true,
-                  contentPadding: EdgeInsets.symmetric(vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          IconButton(
+            onPressed: _toggleVoice,
+            tooltip: _voice ? 'Stop voice mode' : 'Talk',
+            icon: Icon(
+              _voice ? Icons.graphic_eq_rounded : Icons.mic_none_rounded,
+              color: _voice ? Dissolve.accent : Dissolve.muted,
+            ),
+          ),
+          const SizedBox(width: 4),
           Padding(
             padding: const EdgeInsets.only(bottom: 1),
             child: GlossyButton(
               enabled: _hasText && _status == null,
               onPressed: _send,
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
+                duration: Motion.fast,
                 transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
                 child: _status != null
                     ? SizedBox.square(
                         key: const ValueKey('busy'),
                         dimension: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: GlossyButton.ink,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: GlossyButton.ink),
                       )
                     : const Icon(Icons.arrow_upward_rounded, key: ValueKey('send')),
               ),
@@ -424,16 +516,25 @@ class _AssistantScreenState extends State<AssistantScreen> {
   );
 }
 
+class _Msg {
+  _Msg({required this.me, required this.text, this.speaking = false})
+    : spoken = speaking ? 0 : text.length;
+  final bool me;
+  final String text;
+  bool speaking;
+  int spoken;
+}
+
 class _Backdrop extends StatelessWidget {
   const _Backdrop();
   @override
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
       gradient: RadialGradient(
-        center: Alignment(0, -.55),
+        center: const Alignment(0, -.55),
         radius: 1.1,
         colors: [Dissolve.glow, Dissolve.bg],
-        stops: [0, .7],
+        stops: const [0, .7],
       ),
     ),
   );
@@ -473,10 +574,7 @@ class _Chip extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Text(
-            label,
-            style: TextStyle(color: Dissolve.fg, fontSize: 13.5),
-          ),
+          child: Text(label, style: TextStyle(color: Dissolve.fg, fontSize: 13.5)),
         ),
       ),
     ),
@@ -496,7 +594,10 @@ class _UserBubble extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Dissolve.accent.withValues(alpha: .18), Dissolve.accent.withValues(alpha: .10)],
+          colors: [
+            Dissolve.accent.withValues(alpha: .18),
+            Dissolve.accent.withValues(alpha: .10),
+          ],
         ),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(22),
@@ -506,20 +607,20 @@ class _UserBubble extends StatelessWidget {
         ),
         border: Border.all(color: const Color(0x1FA5B4FC)),
       ),
-      child: SelectableText(
-        text,
-        style: TextStyle(color: Dissolve.fg, fontSize: 15, height: 1.4),
-      ),
+      child: SelectableText(text, style: TextStyle(color: Dissolve.fg, fontSize: 15, height: 1.4)),
     ),
   );
 }
 
 class _AssistantMessage extends StatelessWidget {
-  const _AssistantMessage(this.text);
-  final String text;
+  const _AssistantMessage(this.msg);
+  final _Msg msg;
   @override
   Widget build(BuildContext context) {
-    final error = text.startsWith('Error:');
+    final error = msg.text.startsWith('Error:');
+    final shown = msg.speaking
+        ? msg.text.substring(0, msg.spoken.clamp(0, msg.text.length))
+        : msg.text;
     return Padding(
       padding: const EdgeInsets.only(top: 18, bottom: 4, right: 24),
       child: Row(
@@ -547,17 +648,18 @@ class _AssistantMessage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SelectableText(
-                  text,
+                  shown.isEmpty && msg.speaking ? '…' : shown,
                   style: TextStyle(
                     color: error ? Dissolve.danger : Dissolve.fg.withValues(alpha: .92),
                     fontSize: 15,
                     height: 1.55,
                   ),
                 ),
-                Transform.translate(
-                  offset: const Offset(-6, 0),
-                  child: CopyButton(text: text),
-                ),
+                if (!msg.speaking)
+                  Transform.translate(
+                    offset: const Offset(-6, 0),
+                    child: CopyButton(text: msg.text),
+                  ),
               ],
             ),
           ),
@@ -581,11 +683,7 @@ class _ThinkingRow extends StatelessWidget {
         Flexible(
           child: TextScramble(
             status,
-            style: TextStyle(
-              color: Dissolve.muted,
-              fontSize: 13.5,
-              fontFamily: 'monospace',
-            ),
+            style: TextStyle(color: Dissolve.muted, fontSize: 13.5, fontFamily: 'monospace'),
           ),
         ),
         const SizedBox(width: 8),

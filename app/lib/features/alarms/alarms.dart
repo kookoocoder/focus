@@ -4,6 +4,7 @@ import '../../core/notifications.dart';
 import '../../core/store.dart';
 
 const _activitiesKey = 'activities';
+const _customKey = 'customActivities';
 
 /// A daily activity (gym, PW lecture, ...) that reminds you at a set time,
 /// either as a full ringing alarm or as a normal notification.
@@ -18,6 +19,9 @@ class Activity {
   bool enabled;
   bool alarm;
 
+  /// Rings once at the next [hour]:[minute], then turns itself off.
+  bool once;
+
   Activity(
     this.key,
     this.label,
@@ -26,6 +30,7 @@ class Activity {
     List<int>? days,
     this.enabled = false,
     this.alarm = true,
+    this.once = false,
   }) : days = days ?? [1, 2, 3, 4, 5, 6, 7];
 
   String get time =>
@@ -35,7 +40,7 @@ class Activity {
     final now = from ?? DateTime.now();
     for (var d = 0; d < 8; d++) {
       final t = DateTime(now.year, now.month, now.day + d, hour, minute);
-      if (t.isAfter(now) && days.contains(t.weekday)) return t;
+      if (t.isAfter(now) && (once || days.contains(t.weekday))) return t;
     }
     return DateTime(now.year, now.month, now.day + 1, hour, minute);
   }
@@ -46,6 +51,7 @@ class Activity {
     'days': days,
     'enabled': enabled,
     'alarm': alarm,
+    'once': once,
   };
 
   void apply(Map<String, dynamic> j) {
@@ -54,6 +60,7 @@ class Activity {
     days = (j['days'] as List).cast<int>();
     enabled = j['enabled'];
     alarm = j['alarm'];
+    once = j['once'] ?? false;
   }
 }
 
@@ -65,9 +72,15 @@ List<Activity> _defaults() => [
   Activity('diet', 'Log your diet', 21, 30, enabled: true, alarm: false),
 ];
 
+final defaultActivityKeys = {for (final a in _defaults()) a.key};
+
 List<Activity> loadActivities() {
   final saved = Store.read<Map<String, dynamic>>(_activitiesKey) ?? {};
-  final list = _defaults();
+  final list = [
+    ..._defaults(),
+    for (final c in Store.read<List>(_customKey) ?? [])
+      Activity('${c['key']}', '${c['label']}', 0, 0),
+  ];
   for (final a in list) {
     if (saved[a.key] != null) a.apply(saved[a.key]);
   }
@@ -76,6 +89,10 @@ List<Activity> loadActivities() {
 
 Future<void> saveActivities(List<Activity> list) async {
   await Store.write(_activitiesKey, {for (final a in list) a.key: a.toJson()});
+  await Store.write(_customKey, [
+    for (final a in list)
+      if (!defaultActivityKeys.contains(a.key)) {'key': a.key, 'label': a.label},
+  ]);
   await scheduleActivities(list);
 }
 
@@ -158,5 +175,13 @@ Future<void> snooze(int id, String title) => Alarm.set(
 /// After an alarm is stopped, schedule its next ring.
 Future<void> afterDismiss(int id) async {
   await Alarm.stop(id);
-  if (id != _testId) await scheduleActivities();
+  if (id == _testId) return;
+  final list = loadActivities();
+  final i = id - _alarmId(0);
+  if (i >= 0 && i < list.length && list[i].once) {
+    list[i].enabled = false;
+    await saveActivities(list);
+  } else {
+    await scheduleActivities(list);
+  }
 }

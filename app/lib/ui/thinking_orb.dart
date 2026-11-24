@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 
 import 'tokens.dart';
 
-enum OrbState { idle, thinking, searching, listening, done, error }
+enum OrbState { idle, thinking, searching, listening, speaking, done, error }
 
 /// A sphere of dots that shows what the agent is doing. Port of dissolve's
 /// ThinkingOrb: every state change moves each dot from where it is to its new
@@ -114,6 +114,11 @@ class _ThinkingOrbState extends State<ThinkingOrb>
             ? .82 + .22 * widget.level.clamp(0, 1) + .04 * math.sin(t * 9)
             : .9 + .035 * math.sin(t * 1.6);
         return _sphere(i, n, t * .35, .35, pulse);
+      case OrbState.speaking:
+        // Latitude bands ripple outward like a voice wave.
+        final lat = 1 - 2 * (i + .5) / n;
+        final wave = .88 + .07 * math.sin(t * 11 - lat * 6) + .03 * math.sin(t * 5.3);
+        return _sphere(i, n, t * .5, .35, wave);
       case OrbState.thinking:
         final ring = i % 3;
         final k = i ~/ 3;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/store.dart';
 import '../../ui/kit.dart';
 import '../../ui/tokens.dart';
+import '../body/body_goal.dart';
 
 /// Minimal diet log: you type what you ate plus protein/carbs totals. No auto breakdown.
 class DietScreen extends StatefulWidget {
@@ -88,7 +89,15 @@ class _DietScreenState extends State<DietScreen> {
       children: [
         Row(
           children: [
-            Expanded(child: _macro('Protein', _sum('protein'), Dissolve.sky, Icons.egg_alt_outlined)),
+            Expanded(
+              child: _macro(
+                'Protein',
+                _sum('protein'),
+                Dissolve.sky,
+                Icons.egg_alt_outlined,
+                target: loadGoal()?.proteinTarget,
+              ),
+            ),
             const SizedBox(width: 10),
             Expanded(child: _macro('Carbs', _sum('carbs'), Dissolve.warning, Icons.grain_rounded)),
           ],
@@ -148,7 +157,7 @@ class _DietScreenState extends State<DietScreen> {
     );
   }
 
-  Widget _macro(String label, num grams, Color color, IconData icon) => Panel(
+  Widget _macro(String label, num grams, Color color, IconData icon, {int? target}) => Panel(
     glow: color,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,10 +179,14 @@ class _DietScreenState extends State<DietScreen> {
             ),
             Padding(
               padding: EdgeInsets.only(left: 3, bottom: 4),
-              child: Text('g', style: TextStyle(color: Dissolve.muted, fontSize: 15)),
+              child: Text(target == null ? 'g' : 'g / $target', style: Typo.caption),
             ),
           ],
         ),
+        if (target != null) ...[
+          const SizedBox(height: 10),
+          Bar(value: grams / target, color: color),
+        ],
       ],
     ),
   );

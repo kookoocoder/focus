@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="assistant"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/ask_focus"
+        android:shortcutLongLabel="@string/ask_focus">
+        <intent
+            android:action="com.preetam.focus.ASSISTANT"
+            android:targetPackage="com.preetam.focus"
+            android:targetClass="com.preetam.focus.MainActivity"/>
+    </shortcut>
+</shortcuts>

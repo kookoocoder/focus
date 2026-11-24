@@ -28,7 +28,7 @@ bool _isLab(String name) =>
 Future<List<Subject>> syncFromErp() async {
   final (id, pw) = await Credentials.load();
   if (id == null || pw == null) {
-    throw ErpException('ERP credentials missing from build');
+    throw ErpException('ERP not connected. Add your login in Settings.');
   }
   final erp = ErpClient();
   try {

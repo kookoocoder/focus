@@ -28,6 +28,8 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Phonon (libptts_ffi.so) is only built for arm64 phones.
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     buildTypes {
@@ -35,6 +37,7 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
@@ -52,4 +55,7 @@ flutter {
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation("androidx.core:core-ktx:1.13.1")
+    // Calls libptts_ffi.so (Phonon TTS, built from gradium-ai/xn-ptts 45432e0
+    // with android/build.sh; arm64 only, other ABIs fall back to system TTS).
+    implementation("net.java.dev.jna:jna:5.17.0@aar")
 }

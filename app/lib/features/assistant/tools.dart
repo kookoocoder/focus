@@ -222,6 +222,62 @@ final assistantTools = <AssistantTool>[
     mutates: true,
   ),
   AssistantTool(
+    'create_reminder',
+    'Create a new reminder or alarm. time is HH:MM 24h (work out relative times like '
+        '"in 20 minutes" from the current time). once=true rings one time only and '
+        'is always a ringing alarm. days 1=Mon..7=Sun, default every day. '
+        'alarm=false gives a notification instead of a ringing alarm.',
+    (a) async {
+      final list = loadActivities();
+      if (list.length >= 90) return 'error: too many reminders, delete some first';
+      final p = '${a['time']}'.split(':');
+      final once = a['once'] == true;
+      final act = Activity(
+        'c${DateTime.now().millisecondsSinceEpoch}',
+        '${a['label']}',
+        int.parse(p[0]),
+        int.parse(p[1]),
+        days: (a['days'] as List?)?.cast<num>().map((e) => e.toInt()).toList(),
+        enabled: true,
+        alarm: once || a['alarm'] != false,
+        once: once,
+      );
+      await saveActivities(list..add(act));
+      return {'key': act.key, 'label': act.label, 'next': act.nextRing().toString(), ...act.toJson()};
+    },
+    properties: {
+      'label': _str,
+      'time': _str,
+      'days': {'type': 'array', 'items': _num},
+      'alarm': {'type': 'boolean'},
+      'once': {'type': 'boolean'},
+    },
+    required: ['label', 'time'],
+    mutates: true,
+  ),
+  AssistantTool(
+    'delete_reminder',
+    'Delete a reminder by key or label. Built-in ones (wake, gym, PW lecture, diet) '
+        'cannot be deleted, they get turned off instead.',
+    (a) async {
+      final list = loadActivities();
+      final act = _find(list, '${a['key']}');
+      if (act == null) {
+        return 'error: no reminder "${a['key']}"; keys: ${list.map((e) => e.key).join(', ')}';
+      }
+      if (defaultActivityKeys.contains(act.key)) {
+        act.enabled = false;
+        await saveActivities(list);
+        return 'turned off ${act.label}';
+      }
+      await saveActivities(list..remove(act));
+      return 'deleted ${act.label}';
+    },
+    properties: {'key': _str},
+    required: ['key'],
+    mutates: true,
+  ),
+  AssistantTool(
     'list_data',
     'Every key stored on the device with its type and size. Known keys: '
         'subjects (attendance), activities (reminders), diet, gym, pwCourse/pwPages '

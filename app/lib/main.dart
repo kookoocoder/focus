@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'core/background.dart';
+import 'core/credentials.dart';
 import 'core/notifications.dart';
 import 'core/store.dart';
 import 'core/updater.dart';
@@ -13,12 +14,16 @@ import 'features/alarms/ring_screen.dart';
 import 'features/assistant/assistant_screen.dart';
 import 'features/attendance/attendance_screen.dart';
 import 'features/attendance/attendance_sync.dart';
+import 'features/body/weight_screen.dart';
 import 'features/diet/diet_screen.dart';
 import 'features/gate/gate_screen.dart';
 import 'features/gym/gym_screen.dart';
+import 'features/home/overview_screen.dart';
+import 'features/onboarding/onboarding_screen.dart';
 import 'features/scroll/scroll_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/timer/timer_screen.dart';
+import 'features/usage/usage_screen.dart';
 import 'ui/kit.dart';
 import 'ui/theme.dart';
 import 'ui/thinking_orb.dart';
@@ -38,12 +43,14 @@ Future<void> main() async {
   await scheduleActivities();
   await Notifier.requestPermission();
   await scheduleBackgroundSync();
-  if (Store.read<String>(lastSyncKey) == null) {
+  final (id, pw) = await Credentials.load();
+  if (id != null && pw != null && Store.read<String>(lastSyncKey) == null) {
     syncAndNotify(force: true).ignore();
   }
 }
 
 const lookKey = 'theme_mode';
+const _appCh = MethodChannel('focus/app');
 
 class _LookObserver with WidgetsBindingObserver {
   @override
@@ -55,18 +62,15 @@ class _LookObserver with WidgetsBindingObserver {
 void _systemBars() => SystemChrome.setSystemUIOverlayStyle(
   SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Dissolve.light
-        ? Brightness.dark
-        : Brightness.light,
+    statusBarIconBrightness: Dissolve.light ? Brightness.dark : Brightness.light,
     systemNavigationBarColor: Dissolve.bg,
-    systemNavigationBarIconBrightness: Dissolve.light
-        ? Brightness.dark
-        : Brightness.light,
+    systemNavigationBarIconBrightness: Dissolve.light ? Brightness.dark : Brightness.light,
   ),
 );
 
 final navigatorKey = GlobalKey<NavigatorState>();
 final _shown = <int>{};
+VoidCallback? openAssistant;
 
 void _listenForRinging() {
   Alarm.ringing.listen((set) {
@@ -96,9 +100,24 @@ class FocusApp extends StatelessWidget {
           ?child,
         ],
       ),
-      home: const Home(),
+      home: const _Boot(),
     );
   }
+}
+
+class _Boot extends StatefulWidget {
+  const _Boot();
+  @override
+  State<_Boot> createState() => _BootState();
+}
+
+class _BootState extends State<_Boot> {
+  late bool done = isOnboarded();
+
+  @override
+  Widget build(BuildContext context) => done
+      ? const Home()
+      : OnboardingScreen(onDone: () => setState(() => done = true));
 }
 
 class Home extends StatefulWidget {
@@ -111,21 +130,27 @@ class _HomeState extends State<Home> {
   int i = 0;
   int epoch = 0;
   bool _opening = false;
+
   static const pages = [
-    AttendanceScreen(),
+    OverviewScreen(),
     GateScreen(),
-    _Split(labels: ['Gym', 'Diet'], pages: [GymScreen(), DietScreen()]),
-    _Split(labels: ['Timer', 'Scroll'], pages: [TimerScreen(), ScrollScreen()]),
+    _Split(
+      labels: ['Gym', 'Diet', 'Weight'],
+      pages: [GymScreen(), DietScreen(), WeightScreen()],
+    ),
+    _Split(
+      labels: ['Timer', 'Scroll', 'Usage'],
+      pages: [TimerScreen(), ScrollScreen(), UsageScreen()],
+    ),
+    AttendanceScreen(),
   ];
+
   static List<(IconData, IconData, Color)> get tabs => [
-    (Icons.fact_check_outlined, Icons.fact_check_rounded, Hue.classes),
+    (Icons.dashboard_outlined, Icons.dashboard_rounded, Dissolve.accent),
     (Icons.school_outlined, Icons.school_rounded, Hue.gate),
     (Icons.fitness_center_outlined, Icons.fitness_center_rounded, Hue.body),
-    (
-      Icons.center_focus_strong_outlined,
-      Icons.center_focus_strong_rounded,
-      Hue.focus,
-    ),
+    (Icons.center_focus_strong_outlined, Icons.center_focus_strong_rounded, Hue.focus),
+    (Icons.fact_check_outlined, Icons.fact_check_rounded, Hue.classes),
   ];
 
   @override
@@ -134,7 +159,15 @@ class _HomeState extends State<Home> {
     FocusPage.openSettings = () => navigatorKey.currentState!.push(
       MaterialPageRoute(builder: (_) => const SettingsScreen()),
     );
+    openAssistant = _openAssistant;
     checkForUpdate(navigatorKey);
+    _appCh.setMethodCallHandler((call) async {
+      if (call.method == 'openAssistant') _openAssistant();
+      return null;
+    });
+    _appCh.invokeMethod<String>('launchAction').then((a) {
+      if (a == 'assistant') _openAssistant();
+    });
   }
 
   Future<void> _openAssistant() async {
@@ -143,11 +176,11 @@ class _HomeState extends State<Home> {
     HapticFeedback.lightImpact();
     final changed = await navigatorKey.currentState!.push<bool>(
       PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 500),
-        reverseTransitionDuration: const Duration(milliseconds: 350),
+        transitionDuration: Motion.base,
+        reverseTransitionDuration: Motion.fast,
         pageBuilder: (_, _, _) => const AssistantScreen(),
         transitionsBuilder: (_, a, _, child) {
-          final c = CurvedAnimation(parent: a, curve: Curves.easeOutCubic);
+          final c = CurvedAnimation(parent: a, curve: Motion.curve);
           return FadeTransition(
             opacity: c,
             child: ScaleTransition(
@@ -170,8 +203,6 @@ class _HomeState extends State<Home> {
     body: IndexedStack(
       index: i,
       children: [
-        // Hidden tabs stay alive but must not animate: on slow phones their
-        // tickers starve the frame budget and taps get dropped.
         for (final (n, p) in pages.indexed)
           TickerMode(
             enabled: n == i,
@@ -195,8 +226,6 @@ class _HomeState extends State<Home> {
               ),
             ),
             const SizedBox(width: 10),
-            // Fires on touch-down and skips the blur layer, so a busy frame
-            // can't swallow the tap.
             GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTapDown: (_) => _openAssistant(),
@@ -211,7 +240,7 @@ class _HomeState extends State<Home> {
                     BoxShadow(
                       color: Dissolve.shadow,
                       blurRadius: 30,
-                      offset: Offset(0, 12),
+                      offset: const Offset(0, 12),
                     ),
                   ],
                 ),
@@ -238,11 +267,7 @@ class _Glass extends StatelessWidget {
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(radius),
       boxShadow: [
-        BoxShadow(
-          color: Dissolve.shadow,
-          blurRadius: 30,
-          offset: Offset(0, 12),
-        ),
+        BoxShadow(color: Dissolve.shadow, blurRadius: 30, offset: const Offset(0, 12)),
       ],
     ),
     child: ClipRRect(
@@ -263,11 +288,7 @@ class _Glass extends StatelessWidget {
 }
 
 class _NavPill extends StatelessWidget {
-  const _NavPill({
-    required this.index,
-    required this.tabs,
-    required this.onSelect,
-  });
+  const _NavPill({required this.index, required this.tabs, required this.onSelect});
   final int index;
   final List<(IconData, IconData, Color)> tabs;
   final ValueChanged<int> onSelect;
@@ -283,14 +304,14 @@ class _NavPill extends StatelessWidget {
           return Stack(
             children: [
               AnimatedPositioned(
-                duration: const Duration(milliseconds: 420),
+                duration: Motion.base,
                 curve: Curves.easeOutBack,
                 left: 6 + index * w + 3,
                 top: 9,
                 width: w - 6,
                 height: 44,
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
+                  duration: Motion.fast,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(22),
                     color: tabs[index].$3,
@@ -325,16 +346,13 @@ class _NavPill extends StatelessWidget {
                           onTap: () => onSelect(n),
                           child: Center(
                             child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 250),
-                              transitionBuilder: (c, a) =>
-                                  ScaleTransition(scale: a, child: c),
+                              duration: Motion.fast,
+                              transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
                               child: Icon(
                                 n == index ? on : off,
                                 key: ValueKey(n == index),
                                 size: 22,
-                                color: n == index
-                                    ? Dissolve.ink
-                                    : Dissolve.muted,
+                                color: n == index ? Dissolve.ink : Dissolve.muted,
                               ),
                             ),
                           ),
@@ -351,7 +369,7 @@ class _NavPill extends StatelessWidget {
   );
 }
 
-/// Two screens behind one nav tab, switched by the [SubTabs] bar each
+/// Two or more screens behind one nav tab, switched by the [SubTabs] bar each
 /// screen's [FocusPage] draws above its title.
 class _Split extends StatefulWidget {
   const _Split({required this.labels, required this.pages});

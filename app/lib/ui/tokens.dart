@@ -61,6 +61,17 @@ abstract final class Hue {
   static Color get focus => Dissolve.violet;
 }
 
+/// One timing scale for every animation so motion feels the same on every
+/// screen: [fast] for taps and toggles, [base] for content, [slow] for
+/// progress sweeps. Everything eases out with [curve].
+abstract final class Motion {
+  static const fast = Duration(milliseconds: 220);
+  static const base = Duration(milliseconds: 420);
+  static const slow = Duration(milliseconds: 900);
+  static const stagger = Duration(milliseconds: 45);
+  static const curve = Curves.easeOutCubic;
+}
+
 /// Type scale. Use these instead of ad-hoc sizes so every screen has the same
 /// hierarchy: display > title > heading > body > caption/label.
 abstract final class Typo {
