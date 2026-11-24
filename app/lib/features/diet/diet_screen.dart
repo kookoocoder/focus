@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/store.dart';
+import '../../ui/kit.dart';
+import '../../ui/tokens.dart';
 
 /// Minimal diet log: you type what you ate plus protein/carbs totals. No auto breakdown.
 class DietScreen extends StatefulWidget {
@@ -78,44 +80,110 @@ class _DietScreenState extends State<DietScreen> {
   @override
   Widget build(BuildContext context) {
     final todays = log.where((e) => e['date'] == today).toList();
-    return Scaffold(
-      appBar: AppBar(title: const Text('Diet')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _add,
-        child: const Icon(Icons.add),
-      ),
-      body: Column(
-        children: [
-          Card(
-            margin: const EdgeInsets.all(12),
-            child: ListTile(
-              title: const Text('Today'),
-              subtitle: Text(
-                'Protein ${_sum('protein')} g   Carbs ${_sum('carbs')} g',
-              ),
-            ),
-          ),
-          Expanded(
-            child: ListView(
+    return FocusPage(
+      subtitle: '${todays.length} meals today',
+      title: 'Diet',
+      hue: Hue.body,
+      actions: [GlassIcon(icon: Icons.add_rounded, tooltip: 'Log food', onTap: _add)],
+      children: [
+        Row(
+          children: [
+            Expanded(child: _macro('Protein', _sum('protein'), Dissolve.sky, Icons.egg_alt_outlined)),
+            const SizedBox(width: 10),
+            Expanded(child: _macro('Carbs', _sum('carbs'), Dissolve.warning, Icons.grain_rounded)),
+          ],
+        ),
+        if (todays.isNotEmpty) SectionLabel('Today'),
+        if (todays.isEmpty)
+          Panel(
+            onTap: _add,
+            padding: const EdgeInsets.all(28),
+            child: Column(
               children: [
-                for (final e in todays)
-                  ListTile(
-                    title: Text(e['food']),
-                    subtitle: Text('P ${e['protein']} g  C ${e['carbs']} g'),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () {
-                        log.remove(e);
-                        Store.write(_key, log);
-                        setState(() {});
-                      },
-                    ),
-                  ),
+                Icon(Icons.restaurant_rounded, color: Dissolve.muted),
+                SizedBox(height: 10),
+                Text('Nothing logged yet', style: TextStyle(fontWeight: FontWeight.w600)),
+                SizedBox(height: 4),
+                Text('Tap to add what you ate', style: TextStyle(color: Dissolve.muted, fontSize: 13)),
               ],
             ),
           ),
-        ],
-      ),
+        for (final e in todays)
+          DustRow(
+            key: ObjectKey(e),
+            onRemoved: () {
+              log.remove(e);
+              Store.write(_key, log);
+              setState(() {});
+            },
+            builder: (dissolve) => Panel(
+              padding: const EdgeInsets.fromLTRB(18, 14, 6, 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(e['food'], style: Typo.heading.copyWith(fontSize: 15.5)),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            _pill('P ${e['protein']}g', Dissolve.sky),
+                            const SizedBox(width: 6),
+                            _pill('C ${e['carbs']}g', Dissolve.warning),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close_rounded, size: 18, color: Dissolve.muted),
+                    onPressed: dissolve,
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
+
+  Widget _macro(String label, num grams, Color color, IconData icon) => Panel(
+    glow: color,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Text(label, style: Typo.caption),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            NumberTicker(
+              '$grams',
+              style: Typo.metric.copyWith(fontSize: 38),
+            ),
+            Padding(
+              padding: EdgeInsets.only(left: 3, bottom: 4),
+              child: Text('g', style: TextStyle(color: Dissolve.muted, fontSize: 15)),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+  Widget _pill(String t, Color c) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: c.withValues(alpha: .12),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(t, style: TextStyle(color: c, fontSize: 12, fontWeight: FontWeight.w600)),
+  );
 }

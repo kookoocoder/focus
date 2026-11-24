@@ -2,6 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../ui/effects.dart';
+import '../../ui/kit.dart';
+import '../../ui/thinking_orb.dart';
+import '../../ui/tokens.dart';
+
 /// Pomodoro-style focus timer.
 class TimerScreen extends StatefulWidget {
   const TimerScreen({super.key});
@@ -52,47 +57,84 @@ class _TimerScreenState extends State<TimerScreen> {
   Widget build(BuildContext context) {
     final m = (remaining ~/ 60).toString().padLeft(2, '0');
     final s = (remaining % 60).toString().padLeft(2, '0');
-    return Scaffold(
-      appBar: AppBar(title: const Text('Focus')),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '$m:$s',
-              style: const TextStyle(fontSize: 72, fontWeight: FontWeight.w300),
-            ),
-            const SizedBox(height: 16),
-            SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(value: 25, label: Text('25')),
-                ButtonSegment(value: 50, label: Text('50')),
-                ButtonSegment(value: 90, label: Text('90')),
-              ],
-              selected: {minutes},
-              onSelectionChanged: running
-                  ? null
-                  : (v) {
-                      minutes = v.first;
-                      remaining = minutes * 60;
-                      setState(() {});
-                    },
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FilledButton(
-                  onPressed: _toggle,
-                  child: Text(running ? 'Pause' : 'Start'),
+    final total = minutes * 60;
+    final finished = remaining == 0;
+    return FocusPage(
+      subtitle: running ? 'Deep work' : finished ? 'Session complete' : 'Pomodoro',
+      title: 'Focus timer',
+      hue: Hue.focus,
+      children: [
+        const SizedBox(height: 12),
+        Center(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Ring(
+                value: total == 0 ? 0 : remaining / total,
+                size: 290,
+                stroke: 7,
+                color: finished ? Dissolve.success : Hue.focus,
+              ),
+              Opacity(
+                opacity: .55,
+                child: ThinkingOrb(
+                  state: finished
+                      ? OrbState.done
+                      : running
+                      ? OrbState.thinking
+                      : OrbState.idle,
+                  size: 230,
+                  dots: 240,
+                  dotSize: 1.6,
+                  interactive: true,
                 ),
-                const SizedBox(width: 12),
-                OutlinedButton(onPressed: _reset, child: const Text('Reset')),
-              ],
+              ),
+              IgnorePointer(
+                child: NumberTicker(
+                  '$m:$s',
+                  style: Typo.display.copyWith(
+                    fontSize: 64,
+                    fontWeight: FontWeight.w500,
+                    shadows: [Shadow(color: Dissolve.bg, blurRadius: 24)],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 32),
+        Center(
+          child: SegmentedButton<int>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: 25, label: Text('25 min')),
+              ButtonSegment(value: 50, label: Text('50 min')),
+              ButtonSegment(value: 90, label: Text('90 min')),
+            ],
+            selected: {minutes},
+            onSelectionChanged: running
+                ? null
+                : (v) {
+                    minutes = v.first;
+                    remaining = minutes * 60;
+                    setState(() {});
+                  },
+          ),
+        ),
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GlossyButton(
+              size: 72,
+              onPressed: _toggle,
+              child: Icon(running ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 32),
             ),
+            const SizedBox(width: 18),
+            GlassIcon(icon: Icons.replay_rounded, tooltip: 'Reset', onTap: _reset),
           ],
         ),
-      ),
+      ],
     );
   }
 }

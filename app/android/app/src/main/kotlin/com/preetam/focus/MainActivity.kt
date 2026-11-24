@@ -2,7 +2,12 @@ package com.preetam.focus
 
 import android.content.ComponentName
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
+import androidx.core.content.FileProvider
+import java.io.File
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -17,7 +22,7 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "isEnabled" -> result.success(isServiceEnabled())
                     "openSettings" -> {
-                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        openAccessibility()
                         result.success(null)
                     }
                     "getLimit" -> result.success(ScrollStore.limit(this))
@@ -51,6 +56,50 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "focus/app")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "version" -> result.success(version())
+                    "install" -> result.success(install(call.argument<String>("path")!!))
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    /// Opens Accessibility settings scrolled to (and on most OEMs highlighting)
+    /// our service; Android 11 skins often bury it under "Downloaded apps".
+    private fun openAccessibility() {
+        val id = ComponentName(this, ScrollService::class.java).flattenToString()
+        val args = Bundle().apply { putString(":settings:fragment_args_key", id) }
+        val details = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+            .putExtra(Intent.EXTRA_COMPONENT_NAME, id)
+        val list = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            .putExtra(":settings:fragment_args_key", id)
+            .putExtra(":settings:show_fragment_args", args)
+        try {
+            startActivity(if (Build.VERSION.SDK_INT >= 33) details else list)
+        } catch (e: Exception) {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+    }
+
+    private fun version(): Map<String, Any> {
+        val p = packageManager.getPackageInfo(packageName, 0)
+        val code = if (Build.VERSION.SDK_INT >= 28) p.longVersionCode else @Suppress("DEPRECATION") p.versionCode.toLong()
+        return mapOf("name" to (p.versionName ?: ""), "code" to code)
+    }
+
+    /// "permission" when the user still has to allow installs from this app
+    /// (the settings screen is opened for them), else "started".
+    private fun install(path: String): String {
+        if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            return "permission"
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.updates", File(path))
+        startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+        return "started"
     }
 
     private fun isServiceEnabled(): Boolean {

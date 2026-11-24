@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../ui/kit.dart';
+import '../../ui/tokens.dart';
 import 'pw_auto_refresh.dart';
 import 'pw_connect_screen.dart';
 import 'pw_data.dart';
@@ -64,104 +66,145 @@ class _GateScreenState extends State<GateScreen> {
         )
         .toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('GATE 2028'),
-        actions: [
-          TextButton.icon(
-            onPressed: _refresh,
-            icon: Icon(course.subjects.isEmpty ? Icons.link : Icons.refresh),
-            label: Text(course.subjects.isEmpty ? 'Connect PW' : 'Update'),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          Card(
-            child: ListTile(
-              title: Text('$days days left'),
-              subtitle: Text(
-                course.batchName.isEmpty
-                    ? 'Target: GATE Feb 2028'
-                    : course.batchName,
-              ),
-              trailing: total == 0
-                  ? null
-                  : Text(
-                      '$done/$total',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-            ),
-          ),
-          if (course.subjects.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'Tap "Connect PW", log in and open your batch. '
-                'Subjects and lectures come straight from PW.',
-              ),
-            ),
-          if (todays.isNotEmpty) ...[
-            const Padding(
-              padding: EdgeInsets.fromLTRB(4, 12, 4, 4),
-              child: Text("Today's PW lectures"),
-            ),
-            for (final l in todays)
-              Card(
-                child: ListTile(
-                  leading: Text(
-                    _hm(l.start),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  title: Text(l.subject),
-                  subtitle: Text(l.topic),
-                ),
-              ),
-          ],
-          if (subjects.isNotEmpty)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(4, 12, 4, 4),
-              child: Text('Subjects'),
-            ),
-          for (final s in subjects)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
+    final pct = total == 0 ? 0.0 : done / total;
+    return FocusPage(
+      subtitle: course.batchName.isEmpty ? 'Target · Feb 2028' : course.batchName,
+      title: 'GATE 2028',
+      hue: Hue.gate,
+      actions: [
+        GlassIcon(
+          icon: course.subjects.isEmpty ? Icons.link_rounded : Icons.sync_rounded,
+          tooltip: course.subjects.isEmpty ? 'Connect PW' : 'Update',
+          onTap: _refresh,
+        ),
+      ],
+      children: [
+        Panel(
+          glow: Dissolve.accent,
+          padding: const EdgeInsets.all(22),
+          child: Row(
+            children: [
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(child: Text(s.name)),
-                        Text(
-                          s.total == 0
-                              ? 'not started by PW'
-                              : '${s.completed}/${s.total}',
-                        ),
-                      ],
+                    NumberTicker(
+                      '$days',
+                      style: Typo.display,
                     ),
-                    if (s.total > 0) ...[
-                      const SizedBox(height: 6),
-                      LinearProgressIndicator(value: s.completed / s.total),
-                    ],
+                    const SizedBox(height: 4),
+                    Text('days to go', style: Typo.caption),
                   ],
                 ),
               ),
+              if (total > 0)
+                Ring(
+                  value: pct,
+                  size: 96,
+                  stroke: 8,
+                  color: Dissolve.accent,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('${(pct * 100).round()}%', style: Typo.metric.copyWith(fontSize: 20)),
+                      Text('$done/$total', style: TextStyle(color: Dissolve.muted, fontSize: 11)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (course.subjects.isEmpty)
+          Panel(
+            onTap: _refresh,
+            padding: const EdgeInsets.all(26),
+            child: Column(
+              children: [
+                Icon(Icons.link_rounded, color: Dissolve.accent),
+                SizedBox(height: 10),
+                Text('Connect PW', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                SizedBox(height: 6),
+                Text(
+                  'Log in and open your batch. Subjects and lectures come straight from PW.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Dissolve.muted, fontSize: 13, height: 1.4),
+                ),
+              ],
             ),
-          if (course.updated != null)
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Text(
-                'From PW · ${course.updated!.substring(0, 16).replaceFirst('T', ' ')}',
-                style: Theme.of(context).textTheme.bodySmall,
+          ),
+        if (todays.isNotEmpty) ...[
+          SectionLabel("Today's lectures"),
+          for (final l in todays)
+            Panel(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Dissolve.accent.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _hm(l.start),
+                      style: TextStyle(color: Dissolve.accent, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(l.subject, style: Typo.heading.copyWith(fontSize: 15.5)),
+                        const SizedBox(height: 2),
+                        Text(l.topic, style: Typo.caption),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
         ],
-      ),
+        if (subjects.isNotEmpty) SectionLabel('Subjects'),
+        for (final s in subjects)
+          Panel(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: Text(s.name, style: Typo.heading.copyWith(fontSize: 15.5))),
+                    Text(
+                      s.total == 0 ? 'not started' : '${s.completed}/${s.total}',
+                      style: TextStyle(
+                        color: s.total > 0 && s.completed == s.total ? Dissolve.success : Dissolve.muted,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+                if (s.total > 0) ...[
+                  const SizedBox(height: 12),
+                  Bar(
+                    value: s.completed / s.total,
+                    color: s.completed == s.total ? Dissolve.success : Hue.gate,
+                    height: 8,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        if (course.updated != null)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              'From PW · ${course.updated!.substring(0, 16).replaceFirst('T', ' ')}',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Dissolve.muted, fontSize: 12),
+            ),
+          ),
+      ],
     );
   }
 }

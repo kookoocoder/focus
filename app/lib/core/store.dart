@@ -17,4 +17,8 @@ class Store {
 
   static Future<void> write(String key, Object value) =>
       _p.setString(key, jsonEncode(value));
+
+  static Future<void> remove(String key) => _p.remove(key);
+
+  static Set<String> get keys => _p.getKeys();
 }
